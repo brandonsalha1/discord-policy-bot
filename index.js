@@ -257,16 +257,16 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const agencyRows = [...agencyMap.values()].sort((a, b) => b.ap - a.ap)
 
-      const agencyLeaderboard = agencyRows
-        .slice(0, 10)
-        .map((agency, i) => {
-          const medals = ['🥇', '🥈', '🥉']
+const agencyLeaderboard = agencyRows
+  .slice(0, 10)
+  .map((agency, i) => {
+    const medals = ['🥇', '🥈', '🥉']
 
-          return `${medals[i] || `#${i + 1}`} **${agency.agencyName}**\n${formatMoney(
-            agency.ap
-          )} AP • ${agency.policies} Policies`
-        })
-        .join('\n\n')
+    return `${medals[i] || `#${i + 1}`} **${agency.agencyName}** — ${formatMoney(
+      agency.ap
+    )} AP`
+  })
+  .join('\n')
 
       if (rows.length === 0) {
         const emptyMessage = isGeneralChannel
@@ -277,26 +277,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return
       }
 
-      const topFive = rows
-        .slice(0, 5)
-        .map((r, i) => {
-          const topLabels = ['🥇 #1', '🥈 #2', '🥉 #3', '#4', '#5']
-          return `${topLabels[i]} **${r.agentName}**\n${r.agencyName}\n**${formatMoney(
-            r.ap
-          )} AP** • ${r.policies} Policies`
-        })
-        .join('\n\n')
+        const topFive = rows
+          .slice(0, 10)
+          .map((r, i) => {
+            const medals = ['🥇', '🥈', '🥉']
 
-      const rest =
-        rows
-          .slice(5)
-          .map(
-            (r, i) =>
-              `#${i + 6} **${r.agentName}** — ${r.agencyName}\n${formatMoney(
-                r.ap
-              )} AP • ${r.policies} Policies`
-          )
-          .join('\n\n') || 'No other agents yet.'
+            return `${medals[i] || `#${i + 1}`} **${r.agentName}** — ${r.agencyName} — **${formatMoney(
+              r.ap
+            )} AP**`
+          })
+          .join('\n')
+
+        const rest =
+          rows
+            .slice(10)
+            .map(
+              (r, i) =>
+                `#${i + 11} **${r.agentName}** — ${r.agencyName} — ${formatMoney(
+                  r.ap
+                )} AP`
+            )
+            .join('\n') || ''
 
       const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
       const totalAP = rows.reduce((s, r) => s + r.ap, 0)
@@ -308,24 +309,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
      const embed = new EmbedBuilder()
   .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
   .setTitle(title)
-  .setDescription(
-`${topFive}
+.setDescription(
+`🏆 **Agent Leaderboard**
 
-━━━━━━━━━━━━━━━━━━
+${topFive}
 
-📊 **Rest of Agents**
-
-${rest}
-
-
-
-━━━━━━━━━━━━━━━━━━
-
-🏛️ **Agency Leaderboard**
-
-${agencyLeaderboard}
-
-
+${rest ? `\n${rest}\n` : ''}
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -333,8 +322,14 @@ ${agencyLeaderboard}
 
 👥 Active Agents: ${rows.length}
 📄 Policies: ${totalPolicies}
-💰 Total AP: ${formatMoney(totalAP)}`
-  )
+💰 Total AP: ${formatMoney(totalAP)}
+
+━━━━━━━━━━━━━━━━━━
+
+🏛️ **Agency Leaderboard**
+
+${agencyLeaderboard}`
+)
   .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
