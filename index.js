@@ -416,8 +416,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
 .setDescription(
-`
-
+`ㅤ
+ㅤ
 ${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
@@ -472,8 +472,8 @@ const agencyLeaderboard = agencyRows
         .setColor(0x3b82f6)
         .setTitle(`🏢 ${monthName} ${year} Agency Leaderboard`)
 .setDescription(
-`
-
+`ㅤ
+ㅤ
 ${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
