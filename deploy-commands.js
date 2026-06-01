@@ -55,7 +55,7 @@ const commands = [
     .addStringOption((option) =>
       option
         .setName('date')
-        .setDescription('Optional date in YYYY-MM-DD format')
+        .setDescription('Optional date in MM-DD-YYYY format')
         .setRequired(false)
     )
     .toJSON(),
@@ -66,7 +66,7 @@ const commands = [
     .addStringOption((option) =>
       option
         .setName('date')
-        .setDescription('Optional date in YYYY-MM-DD format')
+        .setDescription('Optional date in MM-DD-YYYY format')
         .setRequired(false)
     )
     .toJSON(),
