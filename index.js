@@ -117,7 +117,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   try {
     if (!interaction.isChatInputCommand()) return
 
-    if (interaction.commandName === 'submit-policy') {
+    if (interaction.commandName === 'sale') {
       await interaction.deferReply({ ephemeral: true })
 
       const carrier = interaction.options.getString('carrier').trim()
@@ -203,12 +203,31 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const { start, end, monthName, year } = getMonthRange()
 
-      const { data, error } = await supabase
+      const member = await interaction.guild.members.fetch(interaction.user.id)
+      const agency = getAgencyName(member)
+
+      if (!agency.ok) {
+        await interaction.editReply(agency.message)
+        return
+      }
+
+      const agencyName = agency.agencyName
+      const generalChannelId = process.env.GENERAL_CHANNEL_ID
+      const isGeneralChannel =
+        generalChannelId && interaction.channel.id === generalChannelId
+
+      let query = supabase
         .from('policy_submissions')
         .select('*')
         .eq('status', 'active')
         .gte('submitted_at', start)
         .lt('submitted_at', end)
+
+      if (!isGeneralChannel) {
+        query = query.eq('agency_name', agencyName)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
 
@@ -236,16 +255,18 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const rows = [...map.values()].sort((a, b) => b.ap - a.ap)
 
       if (rows.length === 0) {
-        await interaction.editReply(
-          `No policies submitted yet for ${monthName} ${year}.`
-        )
+        const emptyMessage = isGeneralChannel
+          ? `No policies submitted yet for ${monthName} ${year}.`
+          : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
+
+        await interaction.editReply(emptyMessage)
         return
       }
 
       const topFive = rows
         .slice(0, 5)
         .map((r, i) => {
-        const topLabels = ['🥇 #1', '🥈 #2', '🥉 #3', '#4', '#5']
+          const topLabels = ['🥇 #1', '🥈 #2', '🥉 #3', '#4', '#5']
           return `${topLabels[i]} **${r.agentName}**\n${r.agencyName}\n**${formatMoney(
             r.ap
           )} AP** • ${r.policies} Policies`
@@ -266,9 +287,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
       const totalAP = rows.reduce((s, r) => s + r.ap, 0)
 
+      const title = isGeneralChannel
+        ? `🏆 ${monthName} ${year} Leaderboard`
+        : `🏆 ${agencyName} ${monthName} ${year} Leaderboard`
+
       const embed = new EmbedBuilder()
-        .setColor(0xfacc15)
-        .setTitle(`🏆 ${monthName} ${year} Leaderboard`)
+        .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
+        .setTitle(title)
         .setDescription(
           `${topFive}\n\n━━━━━━━━━━━━━━━━━━\n\n📊 **Rest of Agents**\n\n${rest}`
         )

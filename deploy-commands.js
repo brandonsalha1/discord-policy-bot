@@ -4,7 +4,7 @@ const { REST, Routes, SlashCommandBuilder } = require('discord.js')
 
 const commands = [
   new SlashCommandBuilder()
-    .setName('submit-policy')
+    .setName('sale')
     .setDescription('Submit a newly issued policy')
     .addStringOption((option) =>
       option
