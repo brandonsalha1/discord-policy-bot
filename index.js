@@ -415,13 +415,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const embed = new EmbedBuilder()
         .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
-        .setDescription(
-`${agentLeaderboard}
+.setDescription(
+`
+
+${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
 👥 **${rows.length}** Active Agents`
-        )
+)
         .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
@@ -469,13 +471,15 @@ const agencyLeaderboard = agencyRows
       const embed = new EmbedBuilder()
         .setColor(0x3b82f6)
         .setTitle(`🏢 ${monthName} ${year} Agency Leaderboard`)
-        .setDescription(
-`${agencyLeaderboard}
+.setDescription(
+`
+
+${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
 🏢 **${agencyRows.length}** Active Agencies`
-        )
+)
         .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
