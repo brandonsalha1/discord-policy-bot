@@ -131,14 +131,39 @@ function getMonthRange() {
 }
 
 function getDayRange(dateInput) {
-  const now = dateInput ? new Date(`${dateInput}T00:00:00`) : new Date()
+  let now
 
-  if (Number.isNaN(now.getTime())) {
-    return null
+  if (dateInput) {
+    const parts = dateInput.split('/')
+
+    if (parts.length !== 3) {
+      return null
+    }
+
+    const month = parseInt(parts[0], 10)
+    const day = parseInt(parts[1], 10)
+    const year = parseInt(parts[2], 10)
+
+    now = new Date(year, month - 1, day)
+
+    if (Number.isNaN(now.getTime())) {
+      return null
+    }
+  } else {
+    now = new Date()
   }
 
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+  const start = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate()
+  )
+
+  const end = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() + 1
+  )
 
   return {
     start: start.toISOString(),
@@ -469,8 +494,9 @@ ${agencyLeaderboard}
 const dayRange = getDayRange(dateInput)
 
 if (!dayRange) {
-  await interaction.editReply('Enter the date like this: 2026-06-01')
-  return
+await interaction.editReply(
+  'Enter the date like this: 06/01/2026'
+)
 }
 
 const { start, end, dayName } = dayRange
