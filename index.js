@@ -36,6 +36,22 @@ function getTodayIssueDate() {
   }).format(new Date())
 }
 
+function getAgentAgencyDisplayName(agencyName) {
+  if (agencyName === 'Sezar Butrus (RFG)') {
+    return 'RFG'
+  }
+
+  return agencyName
+}
+
+function getAgencyLeaderboardDisplayName(agencyName) {
+  if (agencyName === 'Sezar Butrus (RFG)') {
+    return 'Royal Financial Group'
+  }
+
+  return agencyName
+}
+
 function getAgencyName(member) {
   const agencyRoles = member.roles.cache.filter((role) =>
     role.name.startsWith(AGENCY_PREFIX)
@@ -239,6 +255,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const rows = [...map.values()].sort((a, b) => b.ap - a.ap)
 
+      if (rows.length === 0) {
+        const emptyMessage = isGeneralChannel
+          ? `No policies submitted yet for ${monthName} ${year}.`
+          : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
+
+        await interaction.editReply(emptyMessage)
+        return
+      }
+
       const agencyMap = new Map()
 
       for (const row of rows) {
@@ -257,47 +282,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const agencyRows = [...agencyMap.values()].sort((a, b) => b.ap - a.ap)
 
-const agencyLeaderboard = agencyRows
-  .slice(0, 10)
-  .map((agency, i) => {
-    const medals = ['🥇', '🥈', '🥉']
+      const agencyLeaderboard = agencyRows
+        .slice(0, 10)
+        .map((agency, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+          const displayAgencyName = getAgencyLeaderboardDisplayName(
+            agency.agencyName
+          )
 
-    return `${medals[i] || `#${i + 1}`} **${agency.agencyName}** — ${formatMoney(
-      agency.ap
-    )} AP`
-  })
-  .join('\n')
+          return `${medals[i] || `#${i + 1}`} **${displayAgencyName}** — ${formatMoney(
+            agency.ap
+          )} AP`
+        })
+        .join('\n')
 
-      if (rows.length === 0) {
-        const emptyMessage = isGeneralChannel
-          ? `No policies submitted yet for ${monthName} ${year}.`
-          : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
+      const topTen = rows
+        .slice(0, 10)
+        .map((r, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+          const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-        await interaction.editReply(emptyMessage)
-        return
-      }
+          return `${medals[i] || `#${i + 1}`} **${r.agentName}** — ${displayAgencyName} — **${formatMoney(
+            r.ap
+          )} AP**`
+        })
+        .join('\n')
 
-        const topFive = rows
-          .slice(0, 10)
+      const rest =
+        rows
+          .slice(10)
           .map((r, i) => {
-            const medals = ['🥇', '🥈', '🥉']
+            const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-            return `${medals[i] || `#${i + 1}`} **${r.agentName}** — ${r.agencyName} — **${formatMoney(
+            return `#${i + 11} **${r.agentName}** — ${displayAgencyName} — ${formatMoney(
               r.ap
-            )} AP**`
+            )} AP`
           })
-          .join('\n')
+          .join('\n') || ''
 
-        const rest =
-          rows
-            .slice(10)
-            .map(
-              (r, i) =>
-                `#${i + 11} **${r.agentName}** — ${r.agencyName} — ${formatMoney(
-                  r.ap
-                )} AP`
-            )
-            .join('\n') || ''
+      const agentLeaderboard = `${topTen}${rest ? `\n${rest}` : ''}`
 
       const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
       const totalAP = rows.reduce((s, r) => s + r.ap, 0)
@@ -306,15 +329,13 @@ const agencyLeaderboard = agencyRows
         ? `🏆 ${monthName} ${year} Leaderboard`
         : `🏆 ${agencyName} ${monthName} ${year} Leaderboard`
 
-     const embed = new EmbedBuilder()
-  .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
-  .setTitle(title)
-.setDescription(
-`🏆 **Agent Leaderboard**
+      const embed = new EmbedBuilder()
+        .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
+        .setTitle(title)
+        .setDescription(
+          `🏆 **Agent Leaderboard**
 
-${topFive}
-
-${rest ? `\n${rest}\n` : ''}
+${agentLeaderboard}
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -329,8 +350,8 @@ ${rest ? `\n${rest}\n` : ''}
 🏛️ **Agency Leaderboard**
 
 ${agencyLeaderboard}`
-)
-  .setTimestamp()
+        )
+        .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
       return
