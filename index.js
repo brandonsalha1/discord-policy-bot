@@ -75,7 +75,7 @@ function getAgentAgencyDisplayName(agencyName) {
 function getSaleAgencyDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
-      return 'Royalty Finance Group'
+      return 'Royal Finance Group'
 
     default:
       return agencyName || 'Unassigned Agency'
@@ -85,7 +85,7 @@ function getSaleAgencyDisplayName(agencyName) {
 function getAgencyLeaderboardDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
-      return 'Royalty Finance Group'
+      return 'Royal Finance Group'
 
     default:
       return agencyName || 'Unassigned Agency'
