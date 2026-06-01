@@ -239,6 +239,35 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const rows = [...map.values()].sort((a, b) => b.ap - a.ap)
 
+      const agencyMap = new Map()
+
+      for (const row of rows) {
+        if (!agencyMap.has(row.agencyName)) {
+          agencyMap.set(row.agencyName, {
+            agencyName: row.agencyName,
+            policies: 0,
+            ap: 0,
+          })
+        }
+
+        const current = agencyMap.get(row.agencyName)
+        current.policies += row.policies
+        current.ap += row.ap
+      }
+
+      const agencyRows = [...agencyMap.values()].sort((a, b) => b.ap - a.ap)
+
+      const agencyLeaderboard = agencyRows
+        .slice(0, 10)
+        .map((agency, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+
+          return `${medals[i] || `#${i + 1}`} **${agency.agencyName}**\n${formatMoney(
+            agency.ap
+          )} AP • ${agency.policies} Policies`
+        })
+        .join('\n\n')
+
       if (rows.length === 0) {
         const emptyMessage = isGeneralChannel
           ? `No policies submitted yet for ${monthName} ${year}.`
@@ -280,7 +309,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
         .setDescription(
-          `${topFive}\n\n━━━━━━━━━━━━━━━━━━\n\n📊 **Rest of Agents**\n\n${rest}`
+          `${topFive}\n\n━━━━━━━━━━━━━━━━━━\n\n📊 **Rest of Agents**\n\n${rest}\n\n━━━━━━━━━━━━━━━━━━\n\n🏛️ **Agency Leaderboard**\n\n${agencyLeaderboard}`
         )
         .addFields(
           {
