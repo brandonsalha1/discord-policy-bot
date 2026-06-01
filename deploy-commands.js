@@ -49,10 +49,27 @@ const commands = [
     .setDescription('Show this month’s agency leaderboard')
     .toJSON(),
 
-    new SlashCommandBuilder()
-  .setName('daily-agency-leaderboard')
-  .setDescription('Show today’s agency leaderboard')
-  .toJSON(),
+  new SlashCommandBuilder()
+    .setName('daily-agency-leaderboard')
+    .setDescription('Show today’s agency leaderboard')
+    .addStringOption((option) =>
+      option
+        .setName('date')
+        .setDescription('Optional date in YYYY-MM-DD format')
+        .setRequired(false)
+    )
+    .toJSON(),
+
+  new SlashCommandBuilder()
+    .setName('daily-agent-leaderboard')
+    .setDescription('Show today’s agent leaderboard')
+    .addStringOption((option) =>
+      option
+        .setName('date')
+        .setDescription('Optional date in YYYY-MM-DD format')
+        .setRequired(false)
+    )
+    .toJSON(),
 
   new SlashCommandBuilder()
     .setName('my-stats')

@@ -75,7 +75,7 @@ function getAgentAgencyDisplayName(agencyName) {
 function getSaleAgencyDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
-      return 'Royal Finance Group'
+      return 'Royal Financial Group'
 
     default:
       return agencyName || 'Unassigned Agency'
@@ -85,7 +85,7 @@ function getSaleAgencyDisplayName(agencyName) {
 function getAgencyLeaderboardDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
-      return 'Royal Finance Group'
+      return 'Royal Financial Group'
 
     default:
       return agencyName || 'Unassigned Agency'
@@ -130,8 +130,13 @@ function getMonthRange() {
   }
 }
 
-function getDayRange() {
-  const now = new Date()
+function getDayRange(dateInput) {
+  const now = dateInput ? new Date(`${dateInput}T00:00:00`) : new Date()
+
+  if (Number.isNaN(now.getTime())) {
+    return null
+  }
+
   const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
 
@@ -460,7 +465,15 @@ ${agencyLeaderboard}
     if (interaction.commandName === 'daily-agency-leaderboard') {
       await interaction.deferReply()
 
-      const { start, end, dayName } = getDayRange()
+  const dateInput = interaction.options.getString('date')
+const dayRange = getDayRange(dateInput)
+
+if (!dayRange) {
+  await interaction.editReply('Enter the date like this: 2026-06-01')
+  return
+}
+
+const { start, end, dayName } = dayRange
 
       const { data, error } = await supabase
         .from('policy_submissions')
@@ -513,6 +526,68 @@ ${agencyLeaderboard}
       await interaction.editReply({ embeds: [embed] })
       return
     }
+
+    if (interaction.commandName === 'daily-agent-leaderboard') {
+  await interaction.deferReply()
+
+  const dateInput = interaction.options.getString('date')
+  const dayRange = getDayRange(dateInput)
+
+  if (!dayRange) {
+    await interaction.editReply('Enter the date like this: 2026-06-01')
+    return
+  }
+
+  const { start, end, dayName } = dayRange
+
+  const { data, error } = await supabase
+    .from('policy_submissions')
+    .select('*')
+    .eq('status', 'active')
+    .gte('submitted_at', start)
+    .lt('submitted_at', end)
+
+  if (error) throw error
+
+  const rows = buildAgentRows(data)
+
+  if (rows.length === 0) {
+    await interaction.editReply(`No agent production yet for ${dayName}.`)
+    return
+  }
+
+  const agentLeaderboard = rows
+    .slice(0, 10)
+    .map((r, i) => {
+      const medals = ['🥇', '🥈', '🥉']
+      const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
+
+      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
+        r.ap
+      )} AP**`
+    })
+    .join('\n')
+
+  const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
+  const totalAP = rows.reduce((s, r) => s + r.ap, 0)
+
+  const embed = new EmbedBuilder()
+    .setColor(0xf97316)
+    .setTitle('🏆 Daily Agent Leaderboard')
+    .setDescription(
+      `📅 ${dayName}
+
+${agentLeaderboard}
+
+📈 **${formatMoney(totalAP)} AP** Total
+📄 **${totalPolicies}** Policies
+👥 **${rows.length}** Active Agents`
+    )
+    .setTimestamp()
+
+  await interaction.editReply({ embeds: [embed] })
+  return
+}
 
     if (interaction.commandName === 'my-stats') {
       await interaction.deferReply({ ephemeral: true })
