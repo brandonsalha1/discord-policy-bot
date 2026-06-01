@@ -53,7 +53,7 @@ function getAgentAgencyDisplayName(agencyName) {
     case 'Salvus Financial Group':
       return 'SFG'
 
-    case 'Kasa Group':
+    case 'Kassa Group':
       return 'KG'
 
     case 'SRS Financial':
