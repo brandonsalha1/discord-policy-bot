@@ -72,16 +72,25 @@ function getAgentAgencyDisplayName(agencyName) {
   }
 }
 
-function getAgencyLeaderboardDisplayName(agencyName) {
+function getSaleAgencyDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
-      return 'Royal Financial Group'
+      return 'Royalty Finance Group'
 
     default:
       return agencyName || 'Unassigned Agency'
   }
 }
 
+function getAgencyLeaderboardDisplayName(agencyName) {
+  switch (agencyName) {
+    case 'Sezar Butrus (RFG)':
+      return 'Royalty Finance Group'
+
+    default:
+      return agencyName || 'Unassigned Agency'
+  }
+}
 
 function getAgencyName(member) {
   const agencyRoles = member.roles.cache.filter((role) =>
@@ -145,6 +154,8 @@ function buildPolicyEmbed({
   agentName,
   agencyName,
 }) {
+  const displayAgencyName = getSaleAgencyDisplayName(agencyName)
+
   return new EmbedBuilder()
     .setColor(0x16a34a)
     .setTitle('💰 Policy Issued')
@@ -156,7 +167,7 @@ function buildPolicyEmbed({
         `💵 **${formatMoney(monthlyPayment)}/mo**`,
         '',
         `👤 **${agentName}**`,
-        `🏛️ **${agencyName}**`,
+        `🏛️ **${displayAgencyName}**`,
       ].join('\n')
     )
     .setFooter({
@@ -344,9 +355,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
-  r.ap
-)} AP**`
+          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
+            r.ap
+          )} AP**`
         })
         .join('\n')
 
@@ -356,9 +367,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .map((r, i) => {
             const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-return `#${i + 11} ${r.agentName} · ${displayAgencyName} · ${formatMoney(
-  r.ap
-)} AP`
+            return `#${i + 11} ${r.agentName} · ${displayAgencyName} · ${formatMoney(
+              r.ap
+            )} AP`
           })
           .join('\n') || ''
 
@@ -417,10 +428,11 @@ ${agentLeaderboard}
           const displayAgencyName = getAgencyLeaderboardDisplayName(
             agency.agencyName
           )
-       const amountText =
-  i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
+          const amountText =
+            i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
+
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
         })
         .join('\n')
 
@@ -446,61 +458,61 @@ ${agencyLeaderboard}
     }
 
     if (interaction.commandName === 'daily-agency-leaderboard') {
-  await interaction.deferReply()
+      await interaction.deferReply()
 
-  const { start, end, dayName } = getDayRange()
+      const { start, end, dayName } = getDayRange()
 
-  const { data, error } = await supabase
-    .from('policy_submissions')
-    .select('*')
-    .eq('status', 'active')
-    .gte('submitted_at', start)
-    .lt('submitted_at', end)
+      const { data, error } = await supabase
+        .from('policy_submissions')
+        .select('*')
+        .eq('status', 'active')
+        .gte('submitted_at', start)
+        .lt('submitted_at', end)
 
-  if (error) throw error
+      if (error) throw error
 
-  const agencyRows = buildAgencyRows(data)
+      const agencyRows = buildAgencyRows(data)
 
-  if (agencyRows.length === 0) {
-    await interaction.editReply(`No agency production yet for ${dayName}.`)
-    return
-  }
+      if (agencyRows.length === 0) {
+        await interaction.editReply(`No agency production yet for ${dayName}.`)
+        return
+      }
 
-  const agencyLeaderboard = agencyRows
-    .slice(0, 10)
-    .map((agency, i) => {
-      const medals = ['🥇', '🥈', '🥉']
-      const displayAgencyName = getAgencyLeaderboardDisplayName(
-        agency.agencyName
-      )
+      const agencyLeaderboard = agencyRows
+        .slice(0, 10)
+        .map((agency, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+          const displayAgencyName = getAgencyLeaderboardDisplayName(
+            agency.agencyName
+          )
 
-      const amountText =
-        i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
+          const amountText =
+            i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-      return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
-    })
-    .join('\n')
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
+        })
+        .join('\n')
 
-  const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
-  const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0)
+      const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
+      const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0)
 
-  const embed = new EmbedBuilder()
-    .setColor(0x22c55e)
-    .setTitle(`🏢 Daily Agency Leaderboard`)
-    .setDescription(
-      `📅 ${dayName}
+      const embed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setTitle(`🏢 Daily Agency Leaderboard`)
+        .setDescription(
+          `📅 ${dayName}
 
 ${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)} AP** Total
 📄 **${totalPolicies}** Policies
 🏢 **${agencyRows.length}** Active Agencies`
-    )
-    .setTimestamp()
+        )
+        .setTimestamp()
 
-  await interaction.editReply({ embeds: [embed] })
-  return
-}
+      await interaction.editReply({ embeds: [embed] })
+      return
+    }
 
     if (interaction.commandName === 'my-stats') {
       await interaction.deferReply({ ephemeral: true })
