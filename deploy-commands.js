@@ -16,6 +16,7 @@ const commands = [
           { name: 'Aflac', value: 'Aflac' },
           { name: 'American Amicable', value: 'American Amicable' },
           { name: 'American Home Life', value: 'American Home Life' },
+          { name: 'Baltimore Life', value: 'Baltimore Life' },
           { name: 'Combined', value: 'Combined' },
           { name: 'Corebridge', value: 'Corebridge' },
           { name: 'Ethos', value: 'Ethos' },
