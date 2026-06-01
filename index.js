@@ -24,6 +24,7 @@ function formatMoney(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
+    maximumFractionDigits: 0,
   }).format(Number(amount || 0))
 }
 
@@ -66,7 +67,7 @@ function getAgentAgencyDisplayName(agencyName) {
       return 'SF'
 
     default:
-      return agencyName
+      return agencyName || 'Unassigned'
   }
 }
 
@@ -76,7 +77,41 @@ function getAgencyLeaderboardDisplayName(agencyName) {
       return 'Royal Financial Group'
 
     default:
-      return agencyName
+      return agencyName || 'Unassigned Agency'
+  }
+}
+
+function getAgencyOwnerName(agencyName) {
+  switch (agencyName) {
+    case 'Sezar Butrus (RFG)':
+      return 'Sezar Butrus'
+
+    case 'AG Financial':
+      return 'Andy Goro'
+
+    case 'Priority Financial Group':
+      return 'Fadi Shalaan'
+
+    case 'Aziz Legacy':
+      return 'Fady Aziz'
+
+    case 'Salvus Financial Group':
+      return 'Meron Asmar'
+
+    case 'Kassa Group':
+      return 'Antonio Kassa'
+
+    case 'SRS Financial':
+      return 'Saad Saad'
+
+    case 'Imperial Crest Financials':
+      return 'Ivan Amsih'
+
+    case 'Stalex Financial':
+      return 'Alex Gowro'
+
+    default:
+      return 'Owner'
   }
 }
 
@@ -143,6 +178,53 @@ function buildPolicyEmbed({
       text: `Submitted by ${agentName}`,
     })
     .setTimestamp()
+}
+
+function buildAgentRows(data) {
+  const map = new Map()
+
+  for (const row of data || []) {
+    const key = row.discord_user_id || row.agent_name || row.id
+
+    if (!map.has(key)) {
+      map.set(key, {
+        agentName: row.agent_name || 'Unknown Agent',
+        agencyName: row.agency_name || 'Unassigned Agency',
+        policies: 0,
+        monthly: 0,
+        ap: 0,
+      })
+    }
+
+    const current = map.get(key)
+    current.policies += 1
+    current.monthly += Number(row.monthly_payment || 0)
+    current.ap += Number(row.annual_premium || 0)
+  }
+
+  return [...map.values()].sort((a, b) => b.ap - a.ap)
+}
+
+function buildAgencyRows(data) {
+  const map = new Map()
+
+  for (const row of data || []) {
+    const agencyName = row.agency_name || 'Unassigned Agency'
+
+    if (!map.has(agencyName)) {
+      map.set(agencyName, {
+        agencyName,
+        policies: 0,
+        ap: 0,
+      })
+    }
+
+    const current = map.get(agencyName)
+    current.policies += 1
+    current.ap += Number(row.annual_premium || 0)
+  }
+
+  return [...map.values()].sort((a, b) => b.ap - a.ap)
 }
 
 client.once(Events.ClientReady, () => {
@@ -260,28 +342,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (error) throw error
 
-      const map = new Map()
-
-      for (const row of data || []) {
-        const key = row.discord_user_id
-
-        if (!map.has(key)) {
-          map.set(key, {
-            agentName: row.agent_name,
-            agencyName: row.agency_name,
-            policies: 0,
-            monthly: 0,
-            ap: 0,
-          })
-        }
-
-        const current = map.get(key)
-        current.policies += 1
-        current.monthly += Number(row.monthly_payment)
-        current.ap += Number(row.annual_premium)
-      }
-
-      const rows = [...map.values()].sort((a, b) => b.ap - a.ap)
+      const rows = buildAgentRows(data)
 
       if (rows.length === 0) {
         const emptyMessage = isGeneralChannel
@@ -292,47 +353,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return
       }
 
-      const agencyMap = new Map()
-
-      for (const row of rows) {
-        if (!agencyMap.has(row.agencyName)) {
-          agencyMap.set(row.agencyName, {
-            agencyName: row.agencyName,
-            policies: 0,
-            ap: 0,
-          })
-        }
-
-        const current = agencyMap.get(row.agencyName)
-        current.policies += row.policies
-        current.ap += row.ap
-      }
-
-      const agencyRows = [...agencyMap.values()].sort((a, b) => b.ap - a.ap)
-
-      const agencyLeaderboard = agencyRows
-        .slice(0, 10)
-        .map((agency, i) => {
-          const medals = ['🥇', '🥈', '🥉']
-          const displayAgencyName = getAgencyLeaderboardDisplayName(
-            agency.agencyName
-          )
-
-          return `${medals[i] || `#${i + 1}`} **${displayAgencyName}** — ${formatMoney(
-            agency.ap
-          )} AP`
-        })
-        .join('\n')
-
       const topTen = rows
         .slice(0, 10)
         .map((r, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-          return `${medals[i] || `#${i + 1}`} **${r.agentName}** — ${displayAgencyName} — **${formatMoney(
+          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
             r.ap
-          )} AP**`
+          )}**`
         })
         .join('\n')
 
@@ -342,9 +371,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .map((r, i) => {
             const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-            return `#${i + 11} **${r.agentName}** — ${displayAgencyName} — ${formatMoney(
+            return `#${i + 11} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
               r.ap
-            )} AP`
+            )}**`
           })
           .join('\n') || ''
 
@@ -354,30 +383,77 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const totalAP = rows.reduce((s, r) => s + r.ap, 0)
 
       const title = isGeneralChannel
-        ? `🏆 ${monthName} ${year} Leaderboard`
-        : `🏆 ${agencyName} ${monthName} ${year} Leaderboard`
+        ? `🏆 ${monthName} ${year} Agent Leaderboard`
+        : `🏆 ${agencyName} ${monthName} ${year} Agent Leaderboard`
 
       const embed = new EmbedBuilder()
         .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
         .setDescription(
-          `🏆 **Agent Leaderboard**
+          `🏆 Agent Leaderboard
 
 ${agentLeaderboard}
 
-━━━━━━━━━━━━━━━━━━
+📈 **${formatMoney(totalAP)}** Total AP
+📄 **${totalPolicies}** Policies
+👥 **${rows.length}** Active Agents`
+        )
+        .setTimestamp()
 
-📈 **Company Totals**
+      await interaction.editReply({ embeds: [embed] })
+      return
+    }
 
-👥 Active Agents: ${rows.length}
-📄 Policies: ${totalPolicies}
-💰 Total AP: ${formatMoney(totalAP)}
+    if (interaction.commandName === 'agency-leaderboard') {
+      await interaction.deferReply()
 
-━━━━━━━━━━━━━━━━━━
+      const { start, end, monthName, year } = getMonthRange()
 
-🏛️ **Agency Leaderboard**
+      const { data, error } = await supabase
+        .from('policy_submissions')
+        .select('*')
+        .eq('status', 'active')
+        .gte('submitted_at', start)
+        .lt('submitted_at', end)
 
-${agencyLeaderboard}`
+      if (error) throw error
+
+      const agencyRows = buildAgencyRows(data)
+
+      if (agencyRows.length === 0) {
+        await interaction.editReply(`No agency production yet for ${monthName} ${year}.`)
+        return
+      }
+
+      const agencyLeaderboard = agencyRows
+        .slice(0, 10)
+        .map((agency, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+          const displayAgencyName = getAgencyLeaderboardDisplayName(
+            agency.agencyName
+          )
+          const ownerName = getAgencyOwnerName(agency.agencyName)
+
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} (${ownerName}) · **${formatMoney(
+            agency.ap
+          )}**`
+        })
+        .join('\n')
+
+      const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
+      const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0)
+
+      const embed = new EmbedBuilder()
+        .setColor(0x3b82f6)
+        .setTitle(`🏢 ${monthName} ${year} Agency Leaderboard`)
+        .setDescription(
+          `🏢 Agency Leaderboard
+
+${agencyLeaderboard}
+
+📈 **${formatMoney(totalAP)}** Total AP
+📄 **${totalPolicies}** Policies
+🏢 **${agencyRows.length}** Active Agencies`
         )
         .setTimestamp()
 
@@ -401,9 +477,9 @@ ${agencyLeaderboard}`
       if (error) throw error
 
       const policies = data || []
-      const ap = policies.reduce((s, r) => s + Number(r.annual_premium), 0)
+      const ap = policies.reduce((s, r) => s + Number(r.annual_premium || 0), 0)
       const monthly = policies.reduce(
-        (s, r) => s + Number(r.monthly_payment),
+        (s, r) => s + Number(r.monthly_payment || 0),
         0
       )
 
