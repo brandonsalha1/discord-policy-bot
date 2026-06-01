@@ -305,30 +305,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ? `🏆 ${monthName} ${year} Leaderboard`
         : `🏆 ${agencyName} ${monthName} ${year} Leaderboard`
 
-      const embed = new EmbedBuilder()
-        .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
-        .setTitle(title)
-        .setDescription(
-          `${topFive}\n\n━━━━━━━━━━━━━━━━━━\n\n📊 **Rest of Agents**\n\n${rest}\n\n━━━━━━━━━━━━━━━━━━\n\n🏛️ **Agency Leaderboard**\n\n${agencyLeaderboard}`
-        )
-        .addFields(
-          {
-            name: '👥 Active Agents',
-            value: String(rows.length),
-            inline: true,
-          },
-          {
-            name: '📄 Policies',
-            value: String(totalPolicies),
-            inline: true,
-          },
-          {
-            name: '💰 Total AP',
-            value: formatMoney(totalAP),
-            inline: true,
-          }
-        )
-        .setTimestamp()
+     const embed = new EmbedBuilder()
+  .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
+  .setTitle(title)
+  .setDescription(
+`${topFive}
+
+━━━━━━━━━━━━━━━━━━
+
+📊 **Rest of Agents**
+
+${rest}
+
+
+
+━━━━━━━━━━━━━━━━━━
+
+🏛️ **Agency Leaderboard**
+
+${agencyLeaderboard}
+
+
+
+━━━━━━━━━━━━━━━━━━
+
+📈 **Company Totals**
+
+👥 Active Agents: ${rows.length}
+📄 Policies: ${totalPolicies}
+💰 Total AP: ${formatMoney(totalAP)}`
+  )
+  .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
       return
