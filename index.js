@@ -24,7 +24,8 @@ function formatMoney(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(Number(amount || 0))
 }
 
@@ -42,8 +43,8 @@ function getAgentAgencyDisplayName(agencyName) {
     case 'Sezar Butrus (RFG)':
       return 'RFG'
 
-    case 'AG Financial':
-      return 'AGF'
+    case 'Capital Financial Group':
+      return 'CFG'
 
     case 'Priority Financial Group':
       return 'PFG'
@@ -81,39 +82,6 @@ function getAgencyLeaderboardDisplayName(agencyName) {
   }
 }
 
-function getAgencyOwnerName(agencyName) {
-  switch (agencyName) {
-    case 'Sezar Butrus (RFG)':
-      return 'Sezar Butrus'
-
-    case 'AG Financial':
-      return 'Andy Goro'
-
-    case 'Priority Financial Group':
-      return 'Fadi Shalaan'
-
-    case 'Aziz Legacy':
-      return 'Fady Aziz'
-
-    case 'Salvus Financial Group':
-      return 'Meron Asmar'
-
-    case 'Kassa Group':
-      return 'Antonio Kassa'
-
-    case 'SRS Financial':
-      return 'Saad Saad'
-
-    case 'Imperial Crest Financials':
-      return 'Ivan Amsih'
-
-    case 'Stalex Financial':
-      return 'Alex Gowro'
-
-    default:
-      return 'Owner'
-  }
-}
 
 function getAgencyName(member) {
   const agencyRoles = member.roles.cache.filter((role) =>
@@ -359,9 +327,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
-            r.ap
-          )}**`
+      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
+  r.ap
+)} AP**`
         })
         .join('\n')
 
@@ -371,9 +339,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
           .map((r, i) => {
             const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-            return `#${i + 11} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
-              r.ap
-            )}**`
+      return `#${i + 11} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
+  r.ap
+)} AP**`
           })
           .join('\n') || ''
 
@@ -432,11 +400,9 @@ ${agentLeaderboard}
           const displayAgencyName = getAgencyLeaderboardDisplayName(
             agency.agencyName
           )
-          const ownerName = getAgencyOwnerName(agency.agencyName)
-
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} (${ownerName}) · **${formatMoney(
+              return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · **${formatMoney(
             agency.ap
-          )}**`
+          )} AP**`
         })
         .join('\n')
 
