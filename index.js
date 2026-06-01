@@ -27,21 +27,13 @@ function formatMoney(amount) {
   }).format(Number(amount || 0))
 }
 
-function isValidDate(dateString) {
-  const regex = /^(0[1-9]|1[0-2])\/(0[1-9]|[12][0-9]|3[01])\/(20\d{2})$/
-
-  if (!regex.test(dateString)) {
-    return false
-  }
-
-  const [month, day, year] = dateString.split('/').map(Number)
-  const date = new Date(year, month - 1, day)
-
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day
-  )
+function getTodayIssueDate() {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    month: '2-digit',
+    day: '2-digit',
+    year: 'numeric',
+  }).format(new Date())
 }
 
 function getAgencyName(member) {
@@ -122,17 +114,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const carrier = interaction.options.getString('carrier').trim()
       const monthlyPayment = interaction.options.getNumber('monthly-premium')
-      const issueDate = interaction.options.getString('issue-date').trim()
+      const issueDate = getTodayIssueDate()
 
       if (!monthlyPayment || monthlyPayment <= 0) {
         await interaction.editReply('Enter a valid monthly premium.')
-        return
-      }
-
-      if (!isValidDate(issueDate)) {
-        await interaction.editReply(
-          'Issue date must be in MM/DD/YYYY format. Example: 06/01/2026'
-        )
         return
       }
 
@@ -194,7 +179,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         })
         .eq('id', policy.id)
 
-      await interaction.editReply('Policy submitted successfully 💰')
+      await interaction.editReply('Sale submitted successfully 💰')
       return
     }
 

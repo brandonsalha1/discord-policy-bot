@@ -36,12 +36,6 @@ const commands = [
         .setDescription('Monthly premium')
         .setRequired(true)
     )
-    .addStringOption((option) =>
-      option
-        .setName('issue-date')
-        .setDescription('Issue date for policy, example: 06/01/2026')
-        .setRequired(true)
-    )
     .toJSON(),
 
   new SlashCommandBuilder()
