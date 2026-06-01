@@ -37,19 +37,47 @@ function getTodayIssueDate() {
 }
 
 function getAgentAgencyDisplayName(agencyName) {
-  if (agencyName === 'Sezar Butrus (RFG)') {
-    return 'RFG'
-  }
+  switch (agencyName) {
+    case 'Sezar Butrus (RFG)':
+      return 'RFG'
 
-  return agencyName
+    case 'AG Financial':
+      return 'AGF'
+
+    case 'Priority Financial Group':
+      return 'PFG'
+
+    case 'Aziz Legacy':
+      return 'AL'
+
+    case 'Salvus Financial Group':
+      return 'SFG'
+
+    case 'Kasa Group':
+      return 'KG'
+
+    case 'SRS Financial':
+      return 'SRSF'
+
+    case 'Imperial Crest Financials':
+      return 'ICF'
+
+    case 'Stalex Financial':
+      return 'SF'
+
+    default:
+      return agencyName
+  }
 }
 
 function getAgencyLeaderboardDisplayName(agencyName) {
-  if (agencyName === 'Sezar Butrus (RFG)') {
-    return 'Royal Financial Group'
-  }
+  switch (agencyName) {
+    case 'Sezar Butrus (RFG)':
+      return 'Royal Financial Group'
 
-  return agencyName
+    default:
+      return agencyName
+  }
 }
 
 function getAgencyName(member) {
