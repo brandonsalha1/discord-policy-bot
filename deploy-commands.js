@@ -49,6 +49,11 @@ const commands = [
     .setDescription('Show this month’s agency leaderboard')
     .toJSON(),
 
+    new SlashCommandBuilder()
+  .setName('daily-agency-leaderboard')
+  .setDescription('Show today’s agency leaderboard')
+  .toJSON(),
+
   new SlashCommandBuilder()
     .setName('my-stats')
     .setDescription('Show your monthly stats')
