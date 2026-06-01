@@ -451,8 +451,7 @@ ${agentLeaderboard}
         return
       }
 
-      const agencyLeaderboard = agencyRows
-        .slice(0, 10)
+const agencyLeaderboard = agencyRows
         .map((agency, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgencyLeaderboardDisplayName(
@@ -553,14 +552,14 @@ ${agencyLeaderboard}
       return
     }
 
-    if (interaction.commandName === 'daily-agent-leaderboard') {
+if (interaction.commandName === 'daily-agent-leaderboard') {
   await interaction.deferReply()
 
   const dateInput = interaction.options.getString('date')
   const dayRange = getDayRange(dateInput)
 
   if (!dayRange) {
-    await interaction.editReply('Enter the date like this: 2026-06-01')
+    await interaction.editReply('Enter the date like this: 06/01/2026')
     return
   }
 
@@ -583,14 +582,14 @@ ${agencyLeaderboard}
   }
 
   const agentLeaderboard = rows
-    .slice(0, 10)
     .map((r, i) => {
       const medals = ['🥇', '🥈', '🥉']
       const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
-        r.ap
-      )} AP**`
+      const amountText =
+        i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`
+
+      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`
     })
     .join('\n')
 
