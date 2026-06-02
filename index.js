@@ -242,17 +242,29 @@ function buildAgencyRows(data) {
         agencyName,
         policies: 0,
         ap: 0,
+        activeAgents: new Set(),
       })
     }
 
     const current = map.get(agencyName)
+
     current.policies += 1
     current.ap += Number(row.annual_premium || 0)
+
+    if (row.discord_user_id) {
+      current.activeAgents.add(row.discord_user_id)
+    }
   }
 
-  return [...map.values()].sort((a, b) => b.ap - a.ap)
+  return [...map.values()]
+    .map((agency) => ({
+      agencyName: agency.agencyName,
+      policies: agency.policies,
+      ap: agency.ap,
+      activeAgents: agency.activeAgents.size,
+    }))
+    .sort((a, b) => b.ap - a.ap)
 }
-
 client.once(Events.ClientReady, () => {
   console.log(`Bot is online as ${client.user.tag}`)
 })
@@ -461,8 +473,7 @@ const agencyLeaderboard = agencyRows
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
-        })
+return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 👥 ${agency.activeAgents} Active Agents`        })
         .join('\n')
 
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
