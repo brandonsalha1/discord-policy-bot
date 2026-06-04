@@ -34,6 +34,10 @@ function formatMoney(amount) {
   }).format(Number(amount || 0))
 }
 
+function activeAgentLabel(count) {
+  return count === 1 ? 'Active Agent' : 'Active Agents'
+}
+
 function getTodayIssueDate() {
   return new Intl.DateTimeFormat('en-US', {
     timeZone: TIME_ZONE,
@@ -550,7 +554,7 @@ ${agentLeaderboard}
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} ${activeAgentLabel(agency.activeAgents)}`
         })
         .join('\n')
 
@@ -620,7 +624,7 @@ ${agencyLeaderboard}
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} ${activeAgentLabel(agency.activeAgents)}`
         })
         .join('\n')
 
