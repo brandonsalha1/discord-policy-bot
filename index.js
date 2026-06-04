@@ -21,6 +21,10 @@ const client = new Client({
 const AGENCY_PREFIX = 'Agency | '
 const TIME_ZONE = 'America/New_York'
 
+function isOwner(interaction) {
+  return interaction.user.id === process.env.OWNER_DISCORD_ID
+}
+
 function formatMoney(amount) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -52,6 +56,7 @@ function getTimeZoneOffsetMs(date, timeZone) {
   }).formatToParts(date)
 
   const values = {}
+
   for (const part of parts) {
     if (part.type !== 'literal') {
       values[part.type] = part.value
@@ -88,6 +93,7 @@ function getCurrentEasternDateParts() {
   }).formatToParts(new Date())
 
   const values = {}
+
   for (const part of parts) {
     if (part.type !== 'literal') {
       values[part.type] = part.value
@@ -132,9 +138,10 @@ function getMonthRange() {
   const { year, month } = getCurrentEasternDateParts()
 
   const start = zonedTimeToUtc(year, month, 1, 0, 0, 0)
-  const end = month === 12
-    ? zonedTimeToUtc(year + 1, 1, 1, 0, 0, 0)
-    : zonedTimeToUtc(year, month + 1, 1, 0, 0, 0)
+  const end =
+    month === 12
+      ? zonedTimeToUtc(year + 1, 1, 1, 0, 0, 0)
+      : zonedTimeToUtc(year, month + 1, 1, 0, 0, 0)
 
   const displayDate = zonedTimeToUtc(year, month, 1, 12, 0, 0)
 
@@ -421,13 +428,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const member = await interaction.guild.members.fetch(interaction.user.id)
       const agency = getAgencyName(member)
+      const owner = isOwner(interaction)
 
-      if (!agency.ok) {
+      if (!agency.ok && !owner) {
         await interaction.editReply(agency.message)
         return
       }
 
-      const agencyName = agency.agencyName
+      const agencyName = agency.ok ? agency.agencyName : null
       const generalChannelId = process.env.GENERAL_CHANNEL_ID
       const isGeneralChannel =
         generalChannelId && interaction.channel.id === generalChannelId
@@ -439,7 +447,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .gte('submitted_at', start)
         .lt('submitted_at', end)
 
-      if (!isGeneralChannel) {
+      if (!isGeneralChannel && !owner && agencyName) {
         query = query.eq('agency_name', agencyName)
       }
 
@@ -450,9 +458,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const rows = buildAgentRows(data)
 
       if (rows.length === 0) {
-        const emptyMessage = isGeneralChannel
-          ? `No policies submitted yet for ${monthName} ${year}.`
-          : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
+        const emptyMessage =
+          isGeneralChannel || owner
+            ? `No policies submitted yet for ${monthName} ${year}.`
+            : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
 
         await interaction.editReply(emptyMessage)
         return
@@ -487,12 +496,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
       const totalAP = rows.reduce((s, r) => s + r.ap, 0)
 
-      const title = isGeneralChannel
-        ? `🏆 ${monthName} ${year} Agent Leaderboard`
-        : `🏆 ${agencyName} ${monthName} ${year} Agent Leaderboard`
+      const title =
+        isGeneralChannel || owner
+          ? `🏆 ${monthName} ${year} Agent Leaderboard`
+          : `🏆 ${agencyName} ${monthName} ${year} Agent Leaderboard`
 
       const embed = new EmbedBuilder()
-        .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
+        .setColor(isGeneralChannel || owner ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
         .setDescription(
           `ㅤ
@@ -540,7 +550,7 @@ ${agentLeaderboard}
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 👥 ${agency.activeAgents} Active Agents`
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`
         })
         .join('\n')
 
@@ -610,7 +620,8 @@ ${agencyLeaderboard}
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`        })
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`
+        })
         .join('\n')
 
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
@@ -677,7 +688,7 @@ ${agencyLeaderboard}
           const amountText =
             i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText} · 📄 ${r.policies} Policies`
+          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`
         })
         .join('\n')
 
