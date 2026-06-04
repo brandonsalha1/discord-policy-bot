@@ -19,6 +19,7 @@ const client = new Client({
 })
 
 const AGENCY_PREFIX = 'Agency | '
+const TIME_ZONE = 'America/New_York'
 
 function formatMoney(amount) {
   return new Intl.NumberFormat('en-US', {
@@ -31,42 +32,169 @@ function formatMoney(amount) {
 
 function getTodayIssueDate() {
   return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
+    timeZone: TIME_ZONE,
     month: '2-digit',
     day: '2-digit',
     year: 'numeric',
   }).format(new Date())
 }
 
+function getTimeZoneOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(date)
+
+  const values = {}
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      values[part.type] = part.value
+    }
+  }
+
+  const asUtc = Date.UTC(
+    Number(values.year),
+    Number(values.month) - 1,
+    Number(values.day),
+    Number(values.hour),
+    Number(values.minute),
+    Number(values.second)
+  )
+
+  return asUtc - date.getTime()
+}
+
+function zonedTimeToUtc(year, month, day, hour = 0, minute = 0, second = 0) {
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second))
+  const offset = getTimeZoneOffsetMs(utcGuess, TIME_ZONE)
+
+  return new Date(
+    Date.UTC(year, month - 1, day, hour, minute, second) - offset
+  )
+}
+
+function getCurrentEasternDateParts() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+
+  const values = {}
+  for (const part of parts) {
+    if (part.type !== 'literal') {
+      values[part.type] = part.value
+    }
+  }
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+  }
+}
+
+function parseDateInput(dateInput) {
+  if (!dateInput) {
+    return getCurrentEasternDateParts()
+  }
+
+  const normalized = dateInput.trim().replaceAll('-', '/')
+  const parts = normalized.split('/')
+
+  if (parts.length !== 3) {
+    return null
+  }
+
+  const month = Number(parts[0])
+  const day = Number(parts[1])
+  const year = Number(parts[2])
+
+  if (!month || !day || !year) {
+    return null
+  }
+
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) {
+    return null
+  }
+
+  return { year, month, day }
+}
+
+function getMonthRange() {
+  const { year, month } = getCurrentEasternDateParts()
+
+  const start = zonedTimeToUtc(year, month, 1, 0, 0, 0)
+  const end = month === 12
+    ? zonedTimeToUtc(year + 1, 1, 1, 0, 0, 0)
+    : zonedTimeToUtc(year, month + 1, 1, 0, 0, 0)
+
+  const displayDate = zonedTimeToUtc(year, month, 1, 12, 0, 0)
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+    monthName: displayDate.toLocaleString('en-US', {
+      timeZone: TIME_ZONE,
+      month: 'long',
+    }),
+    year,
+  }
+}
+
+function getDayRange(dateInput) {
+  const parsed = parseDateInput(dateInput)
+
+  if (!parsed) {
+    return null
+  }
+
+  const { year, month, day } = parsed
+
+  const start = zonedTimeToUtc(year, month, day, 0, 0, 0)
+  const end = zonedTimeToUtc(year, month, day + 1, 0, 0, 0)
+  const displayDate = zonedTimeToUtc(year, month, day, 12, 0, 0)
+
+  return {
+    start: start.toISOString(),
+    end: end.toISOString(),
+    dayName: displayDate.toLocaleDateString('en-US', {
+      timeZone: TIME_ZONE,
+      weekday: 'long',
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }),
+  }
+}
+
 function getAgentAgencyDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
       return 'RFG'
-
     case 'Capital Financial Group':
       return 'CFG'
-
     case 'Priority Financial Group':
       return 'PFG'
-
     case 'Aziz Legacy':
       return 'AL'
-
     case 'Salvus Financial Group':
       return 'SFG'
-
     case 'Kassa Group':
       return 'KG'
-
     case 'SRS Financial':
       return 'SRSF'
-
     case 'Imperial Crest Financials':
       return 'ICF'
-
     case 'Stalex Financial':
       return 'SF'
-
     default:
       return agencyName || 'Unassigned'
   }
@@ -76,7 +204,6 @@ function getSaleAgencyDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
       return 'Royal Financial Group'
-
     default:
       return agencyName || 'Unassigned Agency'
   }
@@ -86,7 +213,6 @@ function getAgencyLeaderboardDisplayName(agencyName) {
   switch (agencyName) {
     case 'Sezar Butrus (RFG)':
       return 'Royal Financial Group'
-
     default:
       return agencyName || 'Unassigned Agency'
   }
@@ -114,66 +240,6 @@ function getAgencyName(member) {
   return {
     ok: true,
     agencyName: agencyRoles.first().name.replace(AGENCY_PREFIX, '').trim(),
-  }
-}
-
-function getMonthRange() {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1)
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-    monthName: now.toLocaleString('en-US', { month: 'long' }),
-    year: now.getFullYear(),
-  }
-}
-
-function getDayRange(dateInput) {
-  let now
-
-  if (dateInput) {
-    const parts = dateInput.split('/')
-
-    if (parts.length !== 3) {
-      return null
-    }
-
-    const month = parseInt(parts[0], 10)
-    const day = parseInt(parts[1], 10)
-    const year = parseInt(parts[2], 10)
-
-    now = new Date(year, month - 1, day)
-
-    if (Number.isNaN(now.getTime())) {
-      return null
-    }
-  } else {
-    now = new Date()
-  }
-
-  const start = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  )
-
-  const end = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate() + 1
-  )
-
-  return {
-    start: start.toISOString(),
-    end: end.toISOString(),
-    dayName: now.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    }),
   }
 }
 
@@ -265,6 +331,7 @@ function buildAgencyRows(data) {
     }))
     .sort((a, b) => b.ap - a.ap)
 }
+
 client.once(Events.ClientReady, () => {
   console.log(`Bot is online as ${client.user.tag}`)
 })
@@ -427,15 +494,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const embed = new EmbedBuilder()
         .setColor(isGeneralChannel ? 0xfacc15 : 0x16a34a)
         .setTitle(title)
-.setDescription(
-`ㅤ
+        .setDescription(
+          `ㅤ
 ㅤ
 ${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
 👥 **${rows.length}** Active Agents`
-)
+        )
         .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
@@ -463,7 +530,7 @@ ${agentLeaderboard}
         return
       }
 
-const agencyLeaderboard = agencyRows
+      const agencyLeaderboard = agencyRows
         .map((agency, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgencyLeaderboardDisplayName(
@@ -473,7 +540,8 @@ const agencyLeaderboard = agencyRows
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 👥 ${agency.activeAgents} Active Agents`        })
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 👥 ${agency.activeAgents} Active Agents`
+        })
         .join('\n')
 
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
@@ -482,15 +550,15 @@ return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · �
       const embed = new EmbedBuilder()
         .setColor(0x3b82f6)
         .setTitle(`🏢 ${monthName} ${year} Agency Leaderboard`)
-.setDescription(
-`ㅤ
+        .setDescription(
+          `ㅤ
 ㅤ
 ${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
 🏢 **${agencyRows.length}** Active Agencies`
-)
+        )
         .setTimestamp()
 
       await interaction.editReply({ embeds: [embed] })
@@ -500,16 +568,19 @@ ${agencyLeaderboard}
     if (interaction.commandName === 'daily-agency-leaderboard') {
       await interaction.deferReply()
 
-  const dateInput = interaction.options.getString('date')
-const dayRange = getDayRange(dateInput)
+      const dateInput = interaction.options.getString('date')
+      const dayRange = getDayRange(dateInput)
 
-if (!dayRange) {
-await interaction.editReply(
-  'Enter the date like this: 06/01/2026'
-)
-}
+      if (!dayRange) {
+        await interaction.editReply('Enter the date like this: 06/01/2026 or 06-01-2026')
+        return
+      }
 
-const { start, end, dayName } = dayRange
+      const { start, end, dayName } = dayRange
+
+      console.log('DAILY AGENCY START:', start)
+      console.log('DAILY AGENCY END:', end)
+      console.log('DAILY AGENCY DAY:', dayName)
 
       const { data, error } = await supabase
         .from('policy_submissions')
@@ -520,6 +591,8 @@ const { start, end, dayName } = dayRange
 
       if (error) throw error
 
+      console.log('DAILY AGENCY ROWS:', data.length)
+
       const agencyRows = buildAgencyRows(data)
 
       if (agencyRows.length === 0) {
@@ -528,7 +601,6 @@ const { start, end, dayName } = dayRange
       }
 
       const agencyLeaderboard = agencyRows
-        .slice(0, 10)
         .map((agency, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgencyLeaderboardDisplayName(
@@ -538,7 +610,7 @@ const { start, end, dayName } = dayRange
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText}`
+          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 📄 ${agency.policies} Policies · 👥 ${agency.activeAgents} Active Agents`
         })
         .join('\n')
 
@@ -547,7 +619,7 @@ const { start, end, dayName } = dayRange
 
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
-        .setTitle(`🏢 Daily Agency Leaderboard`)
+        .setTitle('🏢 Daily Agency Leaderboard')
         .setDescription(
           `📅 ${dayName}
 
@@ -563,67 +635,73 @@ ${agencyLeaderboard}
       return
     }
 
-if (interaction.commandName === 'daily-agent-leaderboard') {
-  await interaction.deferReply()
+    if (interaction.commandName === 'daily-agent-leaderboard') {
+      await interaction.deferReply()
 
-  const dateInput = interaction.options.getString('date')
-  const dayRange = getDayRange(dateInput)
+      const dateInput = interaction.options.getString('date')
+      const dayRange = getDayRange(dateInput)
 
-  if (!dayRange) {
-    await interaction.editReply('Enter the date like this: 06/01/2026')
-    return
-  }
+      if (!dayRange) {
+        await interaction.editReply('Enter the date like this: 06/01/2026 or 06-01-2026')
+        return
+      }
 
-  const { start, end, dayName } = dayRange
+      const { start, end, dayName } = dayRange
 
-  const { data, error } = await supabase
-    .from('policy_submissions')
-    .select('*')
-    .eq('status', 'active')
-    .gte('submitted_at', start)
-    .lt('submitted_at', end)
+      console.log('DAILY AGENT START:', start)
+      console.log('DAILY AGENT END:', end)
+      console.log('DAILY AGENT DAY:', dayName)
 
-  if (error) throw error
+      const { data, error } = await supabase
+        .from('policy_submissions')
+        .select('*')
+        .eq('status', 'active')
+        .gte('submitted_at', start)
+        .lt('submitted_at', end)
 
-  const rows = buildAgentRows(data)
+      if (error) throw error
 
-  if (rows.length === 0) {
-    await interaction.editReply(`No agent production yet for ${dayName}.`)
-    return
-  }
+      console.log('DAILY AGENT ROWS:', data.length)
 
-  const agentLeaderboard = rows
-    .map((r, i) => {
-      const medals = ['🥇', '🥈', '🥉']
-      const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
+      const rows = buildAgentRows(data)
 
-      const amountText =
-        i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`
+      if (rows.length === 0) {
+        await interaction.editReply(`No agent production yet for ${dayName}.`)
+        return
+      }
 
-      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`
-    })
-    .join('\n')
+      const agentLeaderboard = rows
+        .map((r, i) => {
+          const medals = ['🥇', '🥈', '🥉']
+          const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
-  const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
-  const totalAP = rows.reduce((s, r) => s + r.ap, 0)
+          const amountText =
+            i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`
 
-  const embed = new EmbedBuilder()
-    .setColor(0xf97316)
-    .setTitle('🏆 Daily Agent Leaderboard')
-    .setDescription(
-      `📅 ${dayName}
+          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText} · 📄 ${r.policies} Policies`
+        })
+        .join('\n')
+
+      const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
+      const totalAP = rows.reduce((s, r) => s + r.ap, 0)
+
+      const embed = new EmbedBuilder()
+        .setColor(0xf97316)
+        .setTitle('🏆 Daily Agent Leaderboard')
+        .setDescription(
+          `📅 ${dayName}
 
 ${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)} AP** Total
 📄 **${totalPolicies}** Policies
 👥 **${rows.length}** Active Agents`
-    )
-    .setTimestamp()
+        )
+        .setTimestamp()
 
-  await interaction.editReply({ embeds: [embed] })
-  return
-}
+      await interaction.editReply({ embeds: [embed] })
+      return
+    }
 
     if (interaction.commandName === 'my-stats') {
       await interaction.deferReply({ ephemeral: true })
