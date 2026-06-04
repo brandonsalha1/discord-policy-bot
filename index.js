@@ -610,8 +610,7 @@ ${agencyLeaderboard}
           const amountText =
             i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`
 
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · 📄 ${agency.policies} Policies · 👥 ${agency.activeAgents} Active Agents`
-        })
+return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${agency.activeAgents} Active Agents`        })
         .join('\n')
 
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0)
