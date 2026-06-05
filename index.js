@@ -21,6 +21,10 @@ const client = new Client({
 const AGENCY_PREFIX = 'Agency | '
 const TIME_ZONE = 'America/New_York'
 
+const HIDDEN_AGENT_DISCORD_IDS = new Set([
+  process.env.ALEX_GOWRO_DISCORD_ID,
+].filter(Boolean))
+
 function isOwner(interaction) {
   return interaction.user.id === process.env.OWNER_DISCORD_ID
 }
@@ -62,9 +66,7 @@ function getTimeZoneOffsetMs(date, timeZone) {
   const values = {}
 
   for (const part of parts) {
-    if (part.type !== 'literal') {
-      values[part.type] = part.value
-    }
+    if (part.type !== 'literal') values[part.type] = part.value
   }
 
   const asUtc = Date.UTC(
@@ -99,9 +101,7 @@ function getCurrentEasternDateParts() {
   const values = {}
 
   for (const part of parts) {
-    if (part.type !== 'literal') {
-      values[part.type] = part.value
-    }
+    if (part.type !== 'literal') values[part.type] = part.value
   }
 
   return {
@@ -112,24 +112,18 @@ function getCurrentEasternDateParts() {
 }
 
 function parseDateInput(dateInput) {
-  if (!dateInput) {
-    return getCurrentEasternDateParts()
-  }
+  if (!dateInput) return getCurrentEasternDateParts()
 
   const normalized = dateInput.trim().replaceAll('-', '/')
   const parts = normalized.split('/')
 
-  if (parts.length !== 3) {
-    return null
-  }
+  if (parts.length !== 3) return null
 
   const month = Number(parts[0])
   const day = Number(parts[1])
   const year = Number(parts[2])
 
-  if (!month || !day || !year) {
-    return null
-  }
+  if (!month || !day || !year) return null
 
   if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2000) {
     return null
@@ -163,9 +157,7 @@ function getMonthRange() {
 function getDayRange(dateInput) {
   const parsed = parseDateInput(dateInput)
 
-  if (!parsed) {
-    return null
-  }
+  if (!parsed) return null
 
   const { year, month, day } = parsed
 
@@ -291,6 +283,7 @@ function buildAgentRows(data) {
 
     if (!map.has(key)) {
       map.set(key, {
+        discordUserId: row.discord_user_id || null,
         agentName: row.agent_name || 'Unknown Agent',
         agencyName: row.agency_name || 'Unassigned Agency',
         policies: 0,
@@ -306,6 +299,10 @@ function buildAgentRows(data) {
   }
 
   return [...map.values()].sort((a, b) => b.ap - a.ap)
+}
+
+function getVisibleAgentRows(rows) {
+  return rows.filter((row) => !HIDDEN_AGENT_DISCORD_IDS.has(row.discordUserId))
 }
 
 function buildAgencyRows(data) {
@@ -459,9 +456,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (error) throw error
 
-      const rows = buildAgentRows(data)
+      const allRows = buildAgentRows(data)
+      const visibleRows = getVisibleAgentRows(allRows)
 
-      if (rows.length === 0) {
+      if (allRows.length === 0) {
         const emptyMessage =
           isGeneralChannel || owner
             ? `No policies submitted yet for ${monthName} ${year}.`
@@ -471,7 +469,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return
       }
 
-      const topTen = rows
+      if (visibleRows.length === 0) {
+        await interaction.editReply(
+          `No visible agent production yet for ${monthName} ${year}.`
+        )
+        return
+      }
+
+      const topTen = visibleRows
         .slice(0, 10)
         .map((r, i) => {
           const medals = ['🥇', '🥈', '🥉']
@@ -484,7 +489,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         .join('\n')
 
       const rest =
-        rows
+        visibleRows
           .slice(10)
           .map((r, i) => {
             const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
@@ -497,8 +502,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const agentLeaderboard = `${topTen}${rest ? `\n${rest}` : ''}`
 
-      const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
-      const totalAP = rows.reduce((s, r) => s + r.ap, 0)
+      const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0)
+      const totalAP = allRows.reduce((s, r) => s + r.ap, 0)
 
       const title =
         isGeneralChannel || owner
@@ -515,7 +520,7 @@ ${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
-👥 **${rows.length}** Active Agents`
+👥 **${visibleRows.length}** Active Agents`
         )
         .setTimestamp()
 
@@ -592,10 +597,6 @@ ${agencyLeaderboard}
 
       const { start, end, dayName } = dayRange
 
-      console.log('DAILY AGENCY START:', start)
-      console.log('DAILY AGENCY END:', end)
-      console.log('DAILY AGENCY DAY:', dayName)
-
       const { data, error } = await supabase
         .from('policy_submissions')
         .select('*')
@@ -604,8 +605,6 @@ ${agencyLeaderboard}
         .lt('submitted_at', end)
 
       if (error) throw error
-
-      console.log('DAILY AGENCY ROWS:', data.length)
 
       const agencyRows = buildAgencyRows(data)
 
@@ -662,10 +661,6 @@ ${agencyLeaderboard}
 
       const { start, end, dayName } = dayRange
 
-      console.log('DAILY AGENT START:', start)
-      console.log('DAILY AGENT END:', end)
-      console.log('DAILY AGENT DAY:', dayName)
-
       const { data, error } = await supabase
         .from('policy_submissions')
         .select('*')
@@ -675,16 +670,20 @@ ${agencyLeaderboard}
 
       if (error) throw error
 
-      console.log('DAILY AGENT ROWS:', data.length)
+      const allRows = buildAgentRows(data)
+      const visibleRows = getVisibleAgentRows(allRows)
 
-      const rows = buildAgentRows(data)
-
-      if (rows.length === 0) {
+      if (allRows.length === 0) {
         await interaction.editReply(`No agent production yet for ${dayName}.`)
         return
       }
 
-      const agentLeaderboard = rows
+      if (visibleRows.length === 0) {
+        await interaction.editReply(`No visible agent production yet for ${dayName}.`)
+        return
+      }
+
+      const agentLeaderboard = visibleRows
         .map((r, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
@@ -696,8 +695,8 @@ ${agencyLeaderboard}
         })
         .join('\n')
 
-      const totalPolicies = rows.reduce((s, r) => s + r.policies, 0)
-      const totalAP = rows.reduce((s, r) => s + r.ap, 0)
+      const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0)
+      const totalAP = allRows.reduce((s, r) => s + r.ap, 0)
 
       const embed = new EmbedBuilder()
         .setColor(0xf97316)
@@ -709,7 +708,7 @@ ${agentLeaderboard}
 
 📈 **${formatMoney(totalAP)} AP** Total
 📄 **${totalPolicies}** Policies
-👥 **${rows.length}** Active Agents`
+👥 **${visibleRows.length}** Active Agents`
         )
         .setTimestamp()
 
