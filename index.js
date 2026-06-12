@@ -25,6 +25,8 @@ const HIDDEN_AGENT_DISCORD_IDS = new Set([
   process.env.ALEX_GOWRO_DISCORD_ID,
 ].filter(Boolean))
 
+const AGENT_LEADERBOARD_LIMIT = 50
+
 function isOwner(interaction) {
   return interaction.user.id === process.env.OWNER_DISCORD_ID
 }
@@ -488,9 +490,9 @@ client.on(Events.InteractionCreate, async (interaction) => {
         })
         .join('\n')
 
-      const rest =
-        visibleRows
-          .slice(10)
+  const rest =
+  visibleRows
+    .slice(10, AGENT_LEADERBOARD_LIMIT)
           .map((r, i) => {
             const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
@@ -682,9 +684,10 @@ ${agencyLeaderboard}
         await interaction.editReply(`No visible agent production yet for ${dayName}.`)
         return
       }
-
-      const agentLeaderboard = visibleRows
-        .map((r, i) => {
+      
+const agentLeaderboard = visibleRows
+  .slice(0, AGENT_LEADERBOARD_LIMIT)
+  .map((r, i) => {
           const medals = ['🥇', '🥈', '🥉']
           const displayAgencyName = getAgentAgencyDisplayName(r.agencyName)
 
