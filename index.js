@@ -26,6 +26,15 @@ const HIDDEN_AGENT_DISCORD_IDS = new Set([
 ].filter(Boolean))
 
 const AGENT_LEADERBOARD_LIMIT = 50
+const COMPANY_YTD_ADJUSTMENT_SOURCE = 'company_ytd_adjustment'
+
+function isCompanyYtdAdjustment(row) {
+  return row?.source === COMPANY_YTD_ADJUSTMENT_SOURCE
+}
+
+function getLeaderboardRows(data) {
+  return (data || []).filter((row) => !isCompanyYtdAdjustment(row))
+}
 
 function isOwner(interaction) {
   return interaction.user.id === process.env.OWNER_DISCORD_ID
@@ -396,6 +405,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           monthly_payment: monthlyPayment,
           annual_premium: annualPremium,
           issue_date: issueDate,
+          source: 'discord',
         })
         .select()
         .single()
@@ -458,7 +468,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       if (error) throw error
 
-      const allRows = buildAgentRows(data)
+      const leaderboardRows = getLeaderboardRows(data)
+      const allRows = buildAgentRows(leaderboardRows)
       const visibleRows = getVisibleAgentRows(allRows)
 
       if (allRows.length === 0) {
@@ -544,7 +555,8 @@ ${agentLeaderboard}
 
       if (error) throw error
 
-      const agencyRows = buildAgencyRows(data)
+      const leaderboardRows = getLeaderboardRows(data)
+      const agencyRows = buildAgencyRows(leaderboardRows)
 
       if (agencyRows.length === 0) {
         await interaction.editReply(`No agency production yet for ${monthName} ${year}.`)
@@ -608,7 +620,8 @@ ${agencyLeaderboard}
 
       if (error) throw error
 
-      const agencyRows = buildAgencyRows(data)
+      const leaderboardRows = getLeaderboardRows(data)
+      const agencyRows = buildAgencyRows(leaderboardRows)
 
       if (agencyRows.length === 0) {
         await interaction.editReply(`No agency production yet for ${dayName}.`)
@@ -672,7 +685,8 @@ ${agencyLeaderboard}
 
       if (error) throw error
 
-      const allRows = buildAgentRows(data)
+      const leaderboardRows = getLeaderboardRows(data)
+      const allRows = buildAgentRows(leaderboardRows)
       const visibleRows = getVisibleAgentRows(allRows)
 
       if (allRows.length === 0) {
@@ -734,7 +748,7 @@ ${agentLeaderboard}
 
       if (error) throw error
 
-      const policies = data || []
+      const policies = getLeaderboardRows(data)
       const ap = policies.reduce((s, r) => s + Number(r.annual_premium || 0), 0)
       const monthly = policies.reduce(
         (s, r) => s + Number(r.monthly_payment || 0),
