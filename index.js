@@ -9,13 +9,34 @@ const {
 
 const { createClient } = require("@supabase/supabase-js");
 
-console.log("Starting bot...");
-console.log("DISCORD_TOKEN exists:", !!process.env.DISCORD_TOKEN);
-console.log("SUPABASE_URL exists:", !!process.env.SUPABASE_URL);
-console.log(
-  "SUPABASE_SERVICE_ROLE_KEY exists:",
-  !!process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+function logEvent(event, data = {}) {
+  console.log(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event,
+      ...data,
+    })
+  );
+}
+
+function logError(event, error, data = {}) {
+  console.error(
+    JSON.stringify({
+      timestamp: new Date().toISOString(),
+      event,
+      message: error?.message,
+      stack: error?.stack,
+      ...data,
+    })
+  );
+}
+
+logEvent("bot_starting", {
+  discordTokenExists: !!process.env.DISCORD_TOKEN,
+  supabaseUrlExists: !!process.env.SUPABASE_URL,
+  supabaseServiceKeyExists: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+  nodeEnv: process.env.NODE_ENV || "unknown",
+});
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -28,13 +49,36 @@ const client = new Client({
 
 const AGENCY_PREFIX = "Agency | ";
 const TIME_ZONE = "America/New_York";
+const AGENT_LEADERBOARD_LIMIT = 50;
+const COMPANY_YTD_ADJUSTMENT_SOURCE = "company_ytd_adjustment";
 
 const HIDDEN_AGENT_DISCORD_IDS = new Set([
   process.env.ALEX_GOWRO_DISCORD_ID,
 ].filter(Boolean));
 
-const AGENT_LEADERBOARD_LIMIT = 50;
-const COMPANY_YTD_ADJUSTMENT_SOURCE = "company_ytd_adjustment";
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+async function safeErrorReply(interaction, message) {
+  try {
+    if (interaction.deferred || interaction.replied) {
+      await interaction.editReply(message);
+    } else {
+      await interaction.reply({ content: message, ephemeral: true });
+    }
+  } catch (err) {
+    logError("failed_to_send_error_reply", err, {
+      commandName: interaction?.commandName,
+      userId: interaction?.user?.id,
+    });
+  }
+}
 
 function isCompanyYtdAdjustment(row) {
   return row?.source === COMPANY_YTD_ADJUSTMENT_SOURCE;
@@ -152,13 +196,13 @@ function parseDateInput(dateInput) {
 function getMonthRange() {
   const { year, month } = getCurrentEasternDateParts();
 
-  const start = zonedTimeToUtc(year, month, 1, 0, 0, 0);
+  const start = zonedTimeToUtc(year, month, 1);
   const end =
     month === 12
-      ? zonedTimeToUtc(year + 1, 1, 1, 0, 0, 0)
-      : zonedTimeToUtc(year, month + 1, 1, 0, 0, 0);
+      ? zonedTimeToUtc(year + 1, 1, 1)
+      : zonedTimeToUtc(year, month + 1, 1);
 
-  const displayDate = zonedTimeToUtc(year, month, 1, 12, 0, 0);
+  const displayDate = zonedTimeToUtc(year, month, 1, 12);
 
   return {
     start: start.toISOString(),
@@ -173,14 +217,13 @@ function getMonthRange() {
 
 function getDayRange(dateInput) {
   const parsed = parseDateInput(dateInput);
-
   if (!parsed) return null;
 
   const { year, month, day } = parsed;
 
-  const start = zonedTimeToUtc(year, month, day, 0, 0, 0);
-  const end = zonedTimeToUtc(year, month, day + 1, 0, 0, 0);
-  const displayDate = zonedTimeToUtc(year, month, day, 12, 0, 0);
+  const start = zonedTimeToUtc(year, month, day);
+  const end = zonedTimeToUtc(year, month, day + 1);
+  const displayDate = zonedTimeToUtc(year, month, day, 12);
 
   return {
     start: start.toISOString(),
@@ -221,21 +264,15 @@ function getAgentAgencyDisplayName(agencyName) {
 }
 
 function getSaleAgencyDisplayName(agencyName) {
-  switch (agencyName) {
-    case "Sezar Butrus (RFG)":
-      return "Royal Financial Group";
-    default:
-      return agencyName || "Unassigned Agency";
-  }
+  return agencyName === "Sezar Butrus (RFG)"
+    ? "Royal Financial Group"
+    : agencyName || "Unassigned Agency";
 }
 
 function getAgencyLeaderboardDisplayName(agencyName) {
-  switch (agencyName) {
-    case "Sezar Butrus (RFG)":
-      return "Royal Financial Group";
-    default:
-      return agencyName || "Unassigned Agency";
-  }
+  return agencyName === "Sezar Butrus (RFG)"
+    ? "Royal Financial Group"
+    : agencyName || "Unassigned Agency";
 }
 
 function getAgencyName(member) {
@@ -286,9 +323,7 @@ function buildPolicyEmbed({
         `🏛️ **${displayAgencyName}**`,
       ].join("\n")
     )
-    .setFooter({
-      text: `Submitted by ${agentName}`,
-    })
+    .setFooter({ text: `Submitted by ${agentName}` })
     .setTimestamp();
 }
 
@@ -357,41 +392,107 @@ function buildAgencyRows(data) {
     .sort((a, b) => b.ap - a.ap);
 }
 
-async function safeErrorReply(interaction, message) {
-  try {
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(message);
-    } else {
-      await interaction.reply({
-        content: message,
-        ephemeral: true,
-      });
-    }
-  } catch (replyError) {
-    console.error("Failed to send error reply:", replyError);
-  }
+async function fetchGuildMember(interaction) {
+  logEvent("discord_member_fetch_started", {
+    commandName: interaction.commandName,
+    userId: interaction.user.id,
+    guildId: interaction.guildId,
+  });
+
+  const member = await withTimeout(
+    interaction.guild.members.fetch(interaction.user.id),
+    5000,
+    "Discord member fetch"
+  );
+
+  logEvent("discord_member_fetch_completed", {
+    commandName: interaction.commandName,
+    userId: interaction.user.id,
+    nickname: member.nickname || null,
+  });
+
+  return member;
+}
+
+async function runSupabaseQuery(query, label, metadata = {}) {
+  logEvent("supabase_query_started", {
+    label,
+    ...metadata,
+  });
+
+  const result = await withTimeout(query, 8000, label);
+
+  logEvent("supabase_query_completed", {
+    label,
+    rowCount: Array.isArray(result?.data) ? result.data.length : result?.data ? 1 : 0,
+    hasError: !!result?.error,
+    ...metadata,
+  });
+
+  return result;
+}
+
+function buildAgentLeaderboardText(visibleRows, limit = AGENT_LEADERBOARD_LIMIT) {
+  return visibleRows
+    .slice(0, limit)
+    .map((r, i) => {
+      const medals = ["🥇", "🥈", "🥉"];
+      const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
+      const amountText =
+        i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`;
+
+      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`;
+    })
+    .join("\n");
+}
+
+function buildAgencyLeaderboardText(agencyRows) {
+  return agencyRows
+    .map((agency, i) => {
+      const medals = ["🥇", "🥈", "🥉"];
+      const displayAgencyName = getAgencyLeaderboardDisplayName(agency.agencyName);
+      const amountText =
+        i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`;
+
+      return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${
+        agency.activeAgents
+      } ${activeAgentLabel(agency.activeAgents)}`;
+    })
+    .join("\n");
 }
 
 client.once(Events.ClientReady, () => {
-  console.log(`NEW VERSION LIVE - Bot is online as ${client.user.tag}`);
+  logEvent("bot_online", {
+    botTag: client.user.tag,
+    botId: client.user.id,
+  });
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-  console.log("Interaction received:", {
+  logEvent("interaction_received", {
     type: interaction.type,
-    commandName: interaction.commandName,
-    user: interaction.user?.tag,
-    guildId: interaction.guildId,
-    channelId: interaction.channelId,
+    commandName: interaction.commandName || null,
+    userTag: interaction.user?.tag || null,
+    userId: interaction.user?.id || null,
+    guildId: interaction.guildId || null,
+    channelId: interaction.channelId || null,
   });
 
   try {
     if (!interaction.isChatInputCommand()) {
-      console.log("Ignored non-chat-input interaction.");
+      logEvent("interaction_ignored_non_command", {
+        type: interaction.type,
+      });
       return;
     }
 
-    console.log(`Running command: /${interaction.commandName}`);
+    logEvent("command_started", {
+      commandName: interaction.commandName,
+      userTag: interaction.user.tag,
+      userId: interaction.user.id,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+    });
 
     if (interaction.commandName === "sale") {
       await interaction.deferReply({ ephemeral: true });
@@ -400,20 +501,45 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const monthlyPayment = interaction.options.getNumber("monthly-premium");
       const issueDate = getTodayIssueDate();
 
+      logEvent("sale_submission_started", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        carrier,
+        monthlyPayment,
+        issueDate,
+      });
+
       if (!carrier) {
+        logEvent("sale_submission_rejected", {
+          reason: "missing_carrier",
+          userId: interaction.user.id,
+        });
+
         await interaction.editReply("Please select a valid carrier.");
         return;
       }
 
       if (!monthlyPayment || monthlyPayment <= 0) {
+        logEvent("sale_submission_rejected", {
+          reason: "invalid_monthly_premium",
+          userId: interaction.user.id,
+          monthlyPayment,
+        });
+
         await interaction.editReply("Enter a valid monthly premium.");
         return;
       }
 
-      const member = await interaction.guild.members.fetch(interaction.user.id);
+      const member = await fetchGuildMember(interaction);
       const agency = getAgencyName(member);
 
       if (!agency.ok) {
+        logEvent("sale_submission_rejected", {
+          reason: "agency_role_issue",
+          userId: interaction.user.id,
+          message: agency.message,
+        });
+
         await interaction.editReply(agency.message);
         return;
       }
@@ -424,34 +550,76 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const agencyName = agency.agencyName;
       const annualPremium = monthlyPayment * 12;
 
-      const { error: agentError } = await supabase.from("discord_agents").upsert(
+      logEvent("sale_submission_validated", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        agentName,
+        agencyName,
+        carrier,
+        monthlyPayment,
+        annualPremium,
+        issueDate,
+      });
+
+      const { error: agentError } = await runSupabaseQuery(
+        supabase.from("discord_agents").upsert(
+          {
+            discord_user_id: interaction.user.id,
+            agent_name: agentName,
+            agency_name: agencyName,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "discord_user_id" }
+        ),
+        "Supabase discord_agents upsert",
         {
-          discord_user_id: interaction.user.id,
-          agent_name: agentName,
-          agency_name: agencyName,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "discord_user_id" }
+          commandName: "sale",
+          userId: interaction.user.id,
+          agentName,
+          agencyName,
+        }
       );
 
       if (agentError) throw agentError;
 
-      const { data: policy, error } = await supabase
-        .from("policy_submissions")
-        .insert({
-          discord_user_id: interaction.user.id,
-          agent_name: agentName,
-          agency_name: agencyName,
-          carrier,
-          monthly_payment: monthlyPayment,
-          annual_premium: annualPremium,
-          issue_date: issueDate,
-          source: "discord",
-        })
-        .select()
-        .single();
+      const { data: policy, error } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .insert({
+            discord_user_id: interaction.user.id,
+            agent_name: agentName,
+            agency_name: agencyName,
+            carrier,
+            monthly_payment: monthlyPayment,
+            annual_premium: annualPremium,
+            issue_date: issueDate,
+            source: "discord",
+          })
+          .select()
+          .single(),
+        "Supabase policy insert",
+        {
+          commandName: "sale",
+          userId: interaction.user.id,
+          agentName,
+          agencyName,
+          annualPremium,
+        }
+      );
 
       if (error) throw error;
+
+      logEvent("sale_saved_to_database", {
+        policyId: policy.id,
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        agentName,
+        agencyName,
+        carrier,
+        monthlyPayment,
+        annualPremium,
+        issueDate,
+      });
 
       const embed = buildPolicyEmbed({
         carrier,
@@ -461,19 +629,57 @@ client.on(Events.InteractionCreate, async (interaction) => {
         agencyName,
       });
 
-      const sentMessage = await interaction.channel.send({ embeds: [embed] });
+      logEvent("sale_discord_embed_sending", {
+        policyId: policy.id,
+        channelId: interaction.channelId,
+      });
 
-      const { error: updateError } = await supabase
-        .from("policy_submissions")
-        .update({
-          discord_channel_id: sentMessage.channel.id,
-          discord_message_id: sentMessage.id,
-        })
-        .eq("id", policy.id);
+      const sentMessage = await withTimeout(
+        interaction.channel.send({ embeds: [embed] }),
+        5000,
+        "Discord channel send"
+      );
 
-      if (updateError) console.error("Failed to save Discord message ID:", updateError);
+      logEvent("sale_discord_embed_sent", {
+        policyId: policy.id,
+        discordChannelId: sentMessage.channel.id,
+        discordMessageId: sentMessage.id,
+      });
+
+      const { error: updateError } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .update({
+            discord_channel_id: sentMessage.channel.id,
+            discord_message_id: sentMessage.id,
+          })
+          .eq("id", policy.id),
+        "Supabase policy message update",
+        {
+          commandName: "sale",
+          policyId: policy.id,
+        }
+      );
+
+      if (updateError) {
+        logError("sale_message_id_update_failed", updateError, {
+          policyId: policy.id,
+        });
+      }
 
       await interaction.editReply("Sale submitted successfully 💰");
+
+      logEvent("sale_submission_completed", {
+        policyId: policy.id,
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        agentName,
+        agencyName,
+        carrier,
+        monthlyPayment,
+        annualPremium,
+      });
+
       return;
     }
 
@@ -482,11 +688,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       const { start, end, monthName, year } = getMonthRange();
 
-      const member = await interaction.guild.members.fetch(interaction.user.id);
+      logEvent("leaderboard_requested", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        monthName,
+        year,
+        start,
+        end,
+      });
+
+      const member = await fetchGuildMember(interaction);
       const agency = getAgencyName(member);
       const owner = isOwner(interaction);
 
       if (!agency.ok && !owner) {
+        logEvent("leaderboard_rejected", {
+          reason: "agency_role_issue",
+          userId: interaction.user.id,
+          message: agency.message,
+        });
+
         await interaction.editReply(agency.message);
         return;
       }
@@ -507,7 +728,17 @@ client.on(Events.InteractionCreate, async (interaction) => {
         query = query.eq("agency_name", agencyName);
       }
 
-      const { data, error } = await query;
+      const { data, error } = await runSupabaseQuery(
+        query,
+        "Supabase leaderboard query",
+        {
+          commandName: "leaderboard",
+          userId: interaction.user.id,
+          agencyName,
+          isGeneralChannel,
+          owner,
+        }
+      );
 
       if (error) throw error;
 
@@ -515,49 +746,46 @@ client.on(Events.InteractionCreate, async (interaction) => {
       const allRows = buildAgentRows(leaderboardRows);
       const visibleRows = getVisibleAgentRows(allRows);
 
+      logEvent("leaderboard_data_built", {
+        userId: interaction.user.id,
+        agencyName,
+        rawRows: data?.length || 0,
+        leaderboardRows: leaderboardRows.length,
+        agentRows: allRows.length,
+        visibleAgentRows: visibleRows.length,
+      });
+
       if (allRows.length === 0) {
-        const emptyMessage =
+        await interaction.editReply(
           isGeneralChannel || owner
             ? `No policies submitted yet for ${monthName} ${year}.`
-            : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`;
+            : `No policies submitted yet for ${agencyName} in ${monthName} ${year}.`
+        );
 
-        await interaction.editReply(emptyMessage);
+        logEvent("leaderboard_completed_empty", {
+          userId: interaction.user.id,
+          agencyName,
+          monthName,
+          year,
+        });
+
         return;
       }
 
       if (visibleRows.length === 0) {
-        await interaction.editReply(
-          `No visible agent production yet for ${monthName} ${year}.`
-        );
+        await interaction.editReply(`No visible agent production yet for ${monthName} ${year}.`);
+
+        logEvent("leaderboard_completed_no_visible_rows", {
+          userId: interaction.user.id,
+          agencyName,
+          monthName,
+          year,
+        });
+
         return;
       }
 
-      const topTen = visibleRows
-        .slice(0, 10)
-        .map((r, i) => {
-          const medals = ["🥇", "🥈", "🥉"];
-          const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
-
-          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · **${formatMoney(
-            r.ap
-          )} AP**`;
-        })
-        .join("\n");
-
-      const rest =
-        visibleRows
-          .slice(10, AGENT_LEADERBOARD_LIMIT)
-          .map((r, i) => {
-            const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
-
-            return `#${i + 11} ${r.agentName} · ${displayAgencyName} · ${formatMoney(
-              r.ap
-            )} AP`;
-          })
-          .join("\n") || "";
-
-      const agentLeaderboard = `${topTen}${rest ? `\n${rest}` : ""}`;
-
+      const agentLeaderboard = buildAgentLeaderboardText(visibleRows);
       const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = allRows.reduce((s, r) => s + r.ap, 0);
 
@@ -581,6 +809,17 @@ ${agentLeaderboard}
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      logEvent("leaderboard_completed", {
+        userId: interaction.user.id,
+        agencyName,
+        monthName,
+        year,
+        totalPolicies,
+        totalAP,
+        visibleAgents: visibleRows.length,
+      });
+
       return;
     }
 
@@ -589,12 +828,28 @@ ${agentLeaderboard}
 
       const { start, end, monthName, year } = getMonthRange();
 
-      const { data, error } = await supabase
-        .from("policy_submissions")
-        .select("*")
-        .eq("status", "active")
-        .gte("submitted_at", start)
-        .lt("submitted_at", end);
+      logEvent("agency_leaderboard_requested", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        monthName,
+        year,
+        start,
+        end,
+      });
+
+      const { data, error } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .select("*")
+          .eq("status", "active")
+          .gte("submitted_at", start)
+          .lt("submitted_at", end),
+        "Supabase agency leaderboard query",
+        {
+          commandName: "agency-leaderboard",
+          userId: interaction.user.id,
+        }
+      );
 
       if (error) throw error;
 
@@ -603,23 +858,17 @@ ${agentLeaderboard}
 
       if (agencyRows.length === 0) {
         await interaction.editReply(`No agency production yet for ${monthName} ${year}.`);
+
+        logEvent("agency_leaderboard_completed_empty", {
+          userId: interaction.user.id,
+          monthName,
+          year,
+        });
+
         return;
       }
 
-      const agencyLeaderboard = agencyRows
-        .map((agency, i) => {
-          const medals = ["🥇", "🥈", "🥉"];
-          const displayAgencyName = getAgencyLeaderboardDisplayName(agency.agencyName);
-
-          const amountText =
-            i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`;
-
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${
-            agency.activeAgents
-          } ${activeAgentLabel(agency.activeAgents)}`;
-        })
-        .join("\n");
-
+      const agencyLeaderboard = buildAgencyLeaderboardText(agencyRows);
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0);
 
@@ -638,6 +887,16 @@ ${agencyLeaderboard}
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      logEvent("agency_leaderboard_completed", {
+        userId: interaction.user.id,
+        monthName,
+        year,
+        totalPolicies,
+        totalAP,
+        activeAgencies: agencyRows.length,
+      });
+
       return;
     }
 
@@ -654,12 +913,29 @@ ${agencyLeaderboard}
 
       const { start, end, dayName } = dayRange;
 
-      const { data, error } = await supabase
-        .from("policy_submissions")
-        .select("*")
-        .eq("status", "active")
-        .gte("submitted_at", start)
-        .lt("submitted_at", end);
+      logEvent("daily_agency_leaderboard_requested", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        dateInput,
+        dayName,
+        start,
+        end,
+      });
+
+      const { data, error } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .select("*")
+          .eq("status", "active")
+          .gte("submitted_at", start)
+          .lt("submitted_at", end),
+        "Supabase daily agency leaderboard query",
+        {
+          commandName: "daily-agency-leaderboard",
+          userId: interaction.user.id,
+          dayName,
+        }
+      );
 
       if (error) throw error;
 
@@ -668,23 +944,16 @@ ${agencyLeaderboard}
 
       if (agencyRows.length === 0) {
         await interaction.editReply(`No agency production yet for ${dayName}.`);
+
+        logEvent("daily_agency_leaderboard_completed_empty", {
+          userId: interaction.user.id,
+          dayName,
+        });
+
         return;
       }
 
-      const agencyLeaderboard = agencyRows
-        .map((agency, i) => {
-          const medals = ["🥇", "🥈", "🥉"];
-          const displayAgencyName = getAgencyLeaderboardDisplayName(agency.agencyName);
-
-          const amountText =
-            i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`;
-
-          return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${
-            agency.activeAgents
-          } ${activeAgentLabel(agency.activeAgents)}`;
-        })
-        .join("\n");
-
+      const agencyLeaderboard = buildAgencyLeaderboardText(agencyRows);
       const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0);
 
@@ -703,6 +972,15 @@ ${agencyLeaderboard}
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      logEvent("daily_agency_leaderboard_completed", {
+        userId: interaction.user.id,
+        dayName,
+        totalPolicies,
+        totalAP,
+        activeAgencies: agencyRows.length,
+      });
+
       return;
     }
 
@@ -719,12 +997,29 @@ ${agencyLeaderboard}
 
       const { start, end, dayName } = dayRange;
 
-      const { data, error } = await supabase
-        .from("policy_submissions")
-        .select("*")
-        .eq("status", "active")
-        .gte("submitted_at", start)
-        .lt("submitted_at", end);
+      logEvent("daily_agent_leaderboard_requested", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        dateInput,
+        dayName,
+        start,
+        end,
+      });
+
+      const { data, error } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .select("*")
+          .eq("status", "active")
+          .gte("submitted_at", start)
+          .lt("submitted_at", end),
+        "Supabase daily agent leaderboard query",
+        {
+          commandName: "daily-agent-leaderboard",
+          userId: interaction.user.id,
+          dayName,
+        }
+      );
 
       if (error) throw error;
 
@@ -734,27 +1029,27 @@ ${agencyLeaderboard}
 
       if (allRows.length === 0) {
         await interaction.editReply(`No agent production yet for ${dayName}.`);
+
+        logEvent("daily_agent_leaderboard_completed_empty", {
+          userId: interaction.user.id,
+          dayName,
+        });
+
         return;
       }
 
       if (visibleRows.length === 0) {
         await interaction.editReply(`No visible agent production yet for ${dayName}.`);
+
+        logEvent("daily_agent_leaderboard_completed_no_visible_rows", {
+          userId: interaction.user.id,
+          dayName,
+        });
+
         return;
       }
 
-      const agentLeaderboard = visibleRows
-        .slice(0, AGENT_LEADERBOARD_LIMIT)
-        .map((r, i) => {
-          const medals = ["🥇", "🥈", "🥉"];
-          const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
-
-          const amountText =
-            i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`;
-
-          return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`;
-        })
-        .join("\n");
-
+      const agentLeaderboard = buildAgentLeaderboardText(visibleRows);
       const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = allRows.reduce((s, r) => s + r.ap, 0);
 
@@ -773,6 +1068,15 @@ ${agentLeaderboard}
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      logEvent("daily_agent_leaderboard_completed", {
+        userId: interaction.user.id,
+        dayName,
+        totalPolicies,
+        totalAP,
+        visibleAgents: visibleRows.length,
+      });
+
       return;
     }
 
@@ -781,58 +1085,91 @@ ${agentLeaderboard}
 
       const { start, end, monthName, year } = getMonthRange();
 
-      const { data, error } = await supabase
-        .from("policy_submissions")
-        .select("*")
-        .eq("status", "active")
-        .eq("discord_user_id", interaction.user.id)
-        .gte("submitted_at", start)
-        .lt("submitted_at", end);
+      logEvent("my_stats_requested", {
+        userTag: interaction.user.tag,
+        userId: interaction.user.id,
+        monthName,
+        year,
+      });
+
+      const { data, error } = await runSupabaseQuery(
+        supabase
+          .from("policy_submissions")
+          .select("*")
+          .eq("status", "active")
+          .eq("discord_user_id", interaction.user.id)
+          .gte("submitted_at", start)
+          .lt("submitted_at", end),
+        "Supabase my-stats query",
+        {
+          commandName: "my-stats",
+          userId: interaction.user.id,
+        }
+      );
 
       if (error) throw error;
 
       const policies = getLeaderboardRows(data);
       const ap = policies.reduce((s, r) => s + Number(r.annual_premium || 0), 0);
-      const monthly = policies.reduce(
-        (s, r) => s + Number(r.monthly_payment || 0),
-        0
-      );
+      const monthly = policies.reduce((s, r) => s + Number(r.monthly_payment || 0), 0);
 
       const embed = new EmbedBuilder()
         .setColor(0x38bdf8)
         .setTitle(`📊 My ${monthName} ${year} Stats`)
         .addFields(
-          {
-            name: "📄 Policies",
-            value: String(policies.length),
-            inline: true,
-          },
-          {
-            name: "💵 Monthly Premium",
-            value: formatMoney(monthly),
-            inline: true,
-          },
-          {
-            name: "💰 AP",
-            value: formatMoney(ap),
-            inline: true,
-          }
+          { name: "📄 Policies", value: String(policies.length), inline: true },
+          { name: "💵 Monthly Premium", value: formatMoney(monthly), inline: true },
+          { name: "💰 AP", value: formatMoney(ap), inline: true }
         )
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
+      logEvent("my_stats_completed", {
+        userId: interaction.user.id,
+        monthName,
+        year,
+        policies: policies.length,
+        monthly,
+        ap,
+      });
+
       return;
     }
 
-    console.log(`Unknown command received: /${interaction.commandName}`);
+    logEvent("unknown_command_received", {
+      commandName: interaction.commandName,
+      userId: interaction.user.id,
+    });
+
     await interaction.reply({
       content: "Unknown command. This command may need to be re-registered.",
       ephemeral: true,
     });
   } catch (error) {
-    console.error("COMMAND ERROR:", error);
-    await safeErrorReply(interaction, "Something went wrong. Check Railway logs.");
+    logError("command_error", error, {
+      commandName: interaction.commandName,
+      userTag: interaction.user?.tag,
+      userId: interaction.user?.id,
+      guildId: interaction.guildId,
+      channelId: interaction.channelId,
+      deferred: interaction.deferred,
+      replied: interaction.replied,
+    });
+
+    await safeErrorReply(
+      interaction,
+      "Something took too long or failed. Try again in a few seconds."
+    );
   }
+});
+
+process.on("unhandledRejection", (reason) => {
+  logError("unhandled_rejection", reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+process.on("uncaughtException", (error) => {
+  logError("uncaught_exception", error);
 });
 
 client.login(process.env.DISCORD_TOKEN);
