@@ -28,6 +28,7 @@ const commands = [
           { name: 'Royal Neighbors', value: 'Royal Neighbors' },
           { name: 'SBLI', value: 'SBLI' },
           { name: 'Transamerica', value: 'Transamerica' },
+          { name: 'Trinity Life', value: 'Trinity Life' },
           { name: 'United Home Life', value: 'United Home Life' }
         )
     )
