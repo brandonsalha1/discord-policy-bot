@@ -51,6 +51,8 @@ const AGENCY_PREFIX = "Agency | ";
 const TIME_ZONE = "America/New_York";
 const AGENT_LEADERBOARD_LIMIT = 50;
 const COMPANY_YTD_ADJUSTMENT_SOURCE = "company_ytd_adjustment";
+const AGENT_LEADERBOARD_CHUNK_LIMIT = 3400;
+const AGENT_LEADERBOARD_DIVIDER = "────────────";
 
 const HIDDEN_AGENT_DISCORD_IDS = new Set([
   process.env.ALEX_GOWRO_DISCORD_ID,
@@ -444,18 +446,47 @@ async function runSupabaseQuery(query, label, metadata = {}) {
   return result;
 }
 
-function buildAgentLeaderboardText(visibleRows, limit = AGENT_LEADERBOARD_LIMIT) {
-  return visibleRows
-    .slice(0, limit)
-    .map((r, i) => {
-      const medals = ["🥇", "🥈", "🥉"];
-      const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
-      const amountText =
-        i < 10 ? `**${formatMoney(r.ap)} AP**` : `${formatMoney(r.ap)} AP`;
+function buildAgentLeaderboardLines(visibleRows, limit = AGENT_LEADERBOARD_LIMIT) {
+  return visibleRows.slice(0, limit).map((r, i) => {
+    const medals = ["🥇", "🥈", "🥉"];
+    const rank = medals[i] || `#${i + 1}`;
+    const displayAgencyName = getAgentAgencyDisplayName(r.agencyName);
 
-      return `${medals[i] || `#${i + 1}`} ${r.agentName} · ${displayAgencyName} · ${amountText}`;
-    })
-    .join("\n");
+    return `${rank} **${r.agentName}** · ${displayAgencyName} · **${formatMoney(r.ap)} AP**`;
+  });
+}
+
+function buildAgentLeaderboardChunks(
+  visibleRows,
+  limit = AGENT_LEADERBOARD_LIMIT,
+  maxLength = AGENT_LEADERBOARD_CHUNK_LIMIT
+) {
+  const lines = buildAgentLeaderboardLines(visibleRows, limit);
+  const chunks = [];
+  let current = "";
+
+  for (const line of lines) {
+    const nextLine = current
+      ? `${current}\n${AGENT_LEADERBOARD_DIVIDER}\n${line}`
+      : line;
+
+    if (nextLine.length > maxLength && current) {
+      chunks.push(current);
+      current = line;
+    } else {
+      current = nextLine;
+    }
+  }
+
+  if (current) chunks.push(current);
+
+  return chunks;
+}
+
+function buildAgentLeaderboardText(visibleRows, limit = AGENT_LEADERBOARD_LIMIT) {
+  return buildAgentLeaderboardLines(visibleRows, limit).join(
+    `\n${AGENT_LEADERBOARD_DIVIDER}\n`
+  );
 }
 
 function buildAgencyLeaderboardText(agencyRows) {
@@ -797,7 +828,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const agentLeaderboard = buildAgentLeaderboardText(visibleRows);
+      const agentLeaderboardChunks = buildAgentLeaderboardChunks(visibleRows);
       const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = allRows.reduce((s, r) => s + r.ap, 0);
 
@@ -806,21 +837,33 @@ client.on(Events.InteractionCreate, async (interaction) => {
           ? `🏆 ${monthName} ${year} Agent Leaderboard`
           : `🏆 ${agencyName} ${monthName} ${year} Agent Leaderboard`;
 
-      const embed = new EmbedBuilder()
-        .setColor(isGeneralChannel || owner ? 0xfacc15 : 0x16a34a)
-        .setTitle(title)
-        .setDescription(
-          `ㅤ
-ㅤ
-${agentLeaderboard}
+      const embedColor = isGeneralChannel || owner ? 0xfacc15 : 0x16a34a;
+      const embeds = agentLeaderboardChunks.map((chunk, index) => {
+        const pageLabel =
+          agentLeaderboardChunks.length > 1
+            ? ` (${index + 1}/${agentLeaderboardChunks.length})`
+            : "";
 
-📈 **${formatMoney(totalAP)}** Total AP
-📄 **${totalPolicies}** Policies
-👥 **${visibleRows.length}** Active Agents`
-        )
-        .setTimestamp();
+        const description =
+          index === 0
+            ? [
+                `📈 **${formatMoney(totalAP)}** Total AP`,
+                `📄 **${totalPolicies}** Policies`,
+                `👥 **${visibleRows.length}** Active Agents`,
+                "",
+                "━━━━━━━━━━━━━━━━━━━━",
+                chunk,
+              ].join("\n")
+            : chunk;
 
-      await interaction.editReply({ embeds: [embed] });
+        return new EmbedBuilder()
+          .setColor(embedColor)
+          .setTitle(`${title}${pageLabel}`)
+          .setDescription(description)
+          .setTimestamp();
+      });
+
+      await interaction.editReply({ embeds });
 
       logEvent("leaderboard_completed", {
         userId: interaction.user.id,
@@ -1061,25 +1104,39 @@ ${agencyLeaderboard}
         return;
       }
 
-      const agentLeaderboard = buildAgentLeaderboardText(visibleRows);
+      const agentLeaderboardChunks = buildAgentLeaderboardChunks(visibleRows);
       const totalPolicies = allRows.reduce((s, r) => s + r.policies, 0);
       const totalAP = allRows.reduce((s, r) => s + r.ap, 0);
 
-      const embed = new EmbedBuilder()
-        .setColor(0xf97316)
-        .setTitle("🏆 Daily Agent Leaderboard")
-        .setDescription(
-          `📅 ${dayName}
+      const title = "🏆 Daily Agent Leaderboard";
+      const embeds = agentLeaderboardChunks.map((chunk, index) => {
+        const pageLabel =
+          agentLeaderboardChunks.length > 1
+            ? ` (${index + 1}/${agentLeaderboardChunks.length})`
+            : "";
 
-${agentLeaderboard}
+        const description =
+          index === 0
+            ? [
+                `📅 ${dayName}`,
+                "",
+                `📈 **${formatMoney(totalAP)} AP** Total`,
+                `📄 **${totalPolicies}** Policies`,
+                `👥 **${visibleRows.length}** Active Agents`,
+                "",
+                "━━━━━━━━━━━━━━━━━━━━",
+                chunk,
+              ].join("\n")
+            : chunk;
 
-📈 **${formatMoney(totalAP)} AP** Total
-📄 **${totalPolicies}** Policies
-👥 **${visibleRows.length}** Active Agents`
-        )
-        .setTimestamp();
+        return new EmbedBuilder()
+          .setColor(0xf97316)
+          .setTitle(`${title}${pageLabel}`)
+          .setDescription(description)
+          .setTimestamp();
+      });
 
-      await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds });
 
       logEvent("daily_agent_leaderboard_completed", {
         userId: interaction.user.id,
