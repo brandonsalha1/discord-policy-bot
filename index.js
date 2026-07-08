@@ -280,6 +280,7 @@ function getAgencyLeaderboardDisplayName(agencyName) {
   switch (agencyName) {
     case "Sezar Butrus (RFG)":
       return "Royal Financial Group";
+    case "Imperial Crest Financials":
     case "Ambition Prosperity Respect":
       return "Imperial Crest Financials";
     default:
@@ -369,14 +370,42 @@ function getVisibleAgentRows(rows) {
   return rows.filter((row) => !HIDDEN_AGENT_DISCORD_IDS.has(row.discordUserId));
 }
 
+function normalizeAgencyName(agencyName) {
+  return String(agencyName || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
 function getAgencyLeaderboardRollupName(agencyName) {
-  switch (agencyName) {
-    case "Imperial Crest Financials":
-    case "Ambition Prosperity Respect":
+  const normalized = normalizeAgencyName(agencyName);
+
+  switch (normalized) {
+    case "imperial crest financials":
+    case "imperial crest financial":
+    case "ambition prosperity respect":
+    case "apr":
+    case "apr/icf":
       return "Imperial Crest Financials";
+    case "sezar butrus (rfg)":
+      return "Sezar Butrus (RFG)";
     default:
-      return agencyName || "Unassigned Agency";
+      return String(agencyName || "").trim() || "Unassigned Agency";
   }
+}
+
+function getAgencyActiveAgentKey(row, rolledUpAgencyName) {
+  if (row.discord_user_id) {
+    return `discord:${row.discord_user_id}`;
+  }
+
+  if (row.agent_name) {
+    return `agent:${rolledUpAgencyName}:${String(row.agent_name)
+      .trim()
+      .toLowerCase()}`;
+  }
+
+  return null;
 }
 
 function buildAgencyRows(data) {
@@ -399,8 +428,10 @@ function buildAgencyRows(data) {
     current.policies += 1;
     current.ap += Number(row.annual_premium || 0);
 
-    if (row.discord_user_id) {
-      current.activeAgents.add(row.discord_user_id);
+    const activeAgentKey = getAgencyActiveAgentKey(row, agencyName);
+
+    if (activeAgentKey) {
+      current.activeAgents.add(activeAgentKey);
     }
   }
 
