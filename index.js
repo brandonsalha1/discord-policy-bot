@@ -256,6 +256,8 @@ function getAgentAgencyDisplayName(agencyName) {
       return "SRSF";
     case "Imperial Crest Financials":
       return "ICF";
+    case "Ambition Prosperity Respect":
+      return "APR/ICF";
     case "Stalex Financial":
       return "SF";
     default:
@@ -264,15 +266,25 @@ function getAgentAgencyDisplayName(agencyName) {
 }
 
 function getSaleAgencyDisplayName(agencyName) {
-  return agencyName === "Sezar Butrus (RFG)"
-    ? "Royal Financial Group"
-    : agencyName || "Unassigned Agency";
+  switch (agencyName) {
+    case "Sezar Butrus (RFG)":
+      return "Royal Financial Group";
+    case "Ambition Prosperity Respect":
+      return "APR/ICF";
+    default:
+      return agencyName || "Unassigned Agency";
+  }
 }
 
 function getAgencyLeaderboardDisplayName(agencyName) {
-  return agencyName === "Sezar Butrus (RFG)"
-    ? "Royal Financial Group"
-    : agencyName || "Unassigned Agency";
+  switch (agencyName) {
+    case "Sezar Butrus (RFG)":
+      return "Royal Financial Group";
+    case "Ambition Prosperity Respect":
+      return "APR/ICF";
+    default:
+      return agencyName || "Unassigned Agency";
+  }
 }
 
 function getAgencyName(member) {
