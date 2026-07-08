@@ -288,6 +288,65 @@ function getAgencyLeaderboardDisplayName(agencyName) {
   }
 }
 
+function normalizeAgencyName(agencyName) {
+  return String(agencyName || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function getCanonicalAgencyName(agencyName) {
+  const normalized = normalizeAgencyName(agencyName);
+
+  switch (normalized) {
+    case "imperial crest financials":
+    case "imperial crest financial":
+    case "icf":
+      return "Imperial Crest Financials";
+
+    case "ambition prosperity respect":
+    case "apr":
+    case "apr/icf":
+    case "apr / icf":
+      return "Ambition Prosperity Respect";
+
+    case "sezar butrus (rfg)":
+      return "Sezar Butrus (RFG)";
+
+    default:
+      return String(agencyName || "").trim() || "Unassigned Agency";
+  }
+}
+
+function getAgencyLeaderboardRollupName(agencyName) {
+  const canonicalAgencyName = getCanonicalAgencyName(agencyName);
+
+  switch (canonicalAgencyName) {
+    case "Imperial Crest Financials":
+    case "Ambition Prosperity Respect":
+      return "Imperial Crest Financials";
+
+    default:
+      return canonicalAgencyName;
+  }
+}
+
+function getAgencyActiveAgentKey(row, originalAgencyName) {
+  const agencyScope = normalizeAgencyName(originalAgencyName);
+
+  if (row.discord_user_id) {
+    return `${agencyScope}:discord:${row.discord_user_id}`;
+  }
+
+  if (row.agent_name) {
+    return `${agencyScope}:agent:${String(row.agent_name)
+      .trim()
+      .toLowerCase()}`;
+  }
+
+  return null;
+}
+
 function getAgencyName(member) {
   const agencyRoles = member.roles.cache.filter((role) =>
     role.name.startsWith(AGENCY_PREFIX)
@@ -370,79 +429,65 @@ function getVisibleAgentRows(rows) {
   return rows.filter((row) => !HIDDEN_AGENT_DISCORD_IDS.has(row.discordUserId));
 }
 
-function normalizeAgencyName(agencyName) {
-  return String(agencyName || "")
-    .trim()
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-}
-
-function getAgencyLeaderboardRollupName(agencyName) {
-  const normalized = normalizeAgencyName(agencyName);
-
-  switch (normalized) {
-    case "imperial crest financials":
-    case "imperial crest financial":
-    case "ambition prosperity respect":
-    case "apr":
-    case "apr/icf":
-      return "Imperial Crest Financials";
-    case "sezar butrus (rfg)":
-      return "Sezar Butrus (RFG)";
-    default:
-      return String(agencyName || "").trim() || "Unassigned Agency";
-  }
-}
-
-function getAgencyActiveAgentKey(row, rolledUpAgencyName) {
-  if (row.discord_user_id) {
-    return `discord:${row.discord_user_id}`;
-  }
-
-  if (row.agent_name) {
-    return `agent:${rolledUpAgencyName}:${String(row.agent_name)
-      .trim()
-      .toLowerCase()}`;
-  }
-
-  return null;
-}
-
 function buildAgencyRows(data) {
-  const map = new Map();
+  const originalAgencyMap = new Map();
 
   for (const row of data || []) {
-    const agencyName = getAgencyLeaderboardRollupName(row.agency_name);
+    const originalAgencyName = getCanonicalAgencyName(row.agency_name);
+    const rollupAgencyName = getAgencyLeaderboardRollupName(originalAgencyName);
 
-    if (!map.has(agencyName)) {
-      map.set(agencyName, {
-        agencyName,
+    if (!originalAgencyMap.has(originalAgencyName)) {
+      originalAgencyMap.set(originalAgencyName, {
+        originalAgencyName,
+        rollupAgencyName,
         policies: 0,
         ap: 0,
         activeAgents: new Set(),
       });
     }
 
-    const current = map.get(agencyName);
+    const current = originalAgencyMap.get(originalAgencyName);
 
     current.policies += 1;
     current.ap += Number(row.annual_premium || 0);
 
-    const activeAgentKey = getAgencyActiveAgentKey(row, agencyName);
+    const activeAgentKey = getAgencyActiveAgentKey(row, originalAgencyName);
 
     if (activeAgentKey) {
       current.activeAgents.add(activeAgentKey);
     }
   }
 
-  return [...map.values()]
-    .map((agency) => ({
-      agencyName: agency.agencyName,
-      policies: agency.policies,
-      ap: agency.ap,
-      activeAgents: agency.activeAgents.size,
-    }))
-    .sort((a, b) => b.ap - a.ap);
+  const rollupMap = new Map();
+
+  for (const originalAgency of originalAgencyMap.values()) {
+    const agencyName = originalAgency.rollupAgencyName;
+
+    if (!rollupMap.has(agencyName)) {
+      rollupMap.set(agencyName, {
+        agencyName,
+        policies: 0,
+        ap: 0,
+        activeAgents: 0,
+      });
+    }
+
+    const current = rollupMap.get(agencyName);
+
+    // AP and policies are added from each original agency.
+    // Example:
+    // Imperial Crest Financials AP + Ambition Prosperity Respect AP
+    current.policies += originalAgency.policies;
+    current.ap += originalAgency.ap;
+
+    // Active agents are counted per original agency first, then added together.
+    // Example:
+    // Imperial Crest Financials 10 active agents + APR 6 active agents = 16.
+    // This avoids de-duping the same person across both agencies after the rollup.
+    current.activeAgents += originalAgency.activeAgents.size;
+  }
+
+  return [...rollupMap.values()].sort((a, b) => b.ap - a.ap);
 }
 
 async function fetchGuildMember(interaction) {
