@@ -281,7 +281,7 @@ function getAgencyLeaderboardDisplayName(agencyName) {
     case "Sezar Butrus (RFG)":
       return "Royal Financial Group";
     case "Ambition Prosperity Respect":
-      return "APR/ICF";
+      return "Imperial Crest Financials";
     default:
       return agencyName || "Unassigned Agency";
   }
@@ -369,11 +369,21 @@ function getVisibleAgentRows(rows) {
   return rows.filter((row) => !HIDDEN_AGENT_DISCORD_IDS.has(row.discordUserId));
 }
 
+function getAgencyLeaderboardRollupName(agencyName) {
+  switch (agencyName) {
+    case "Imperial Crest Financials":
+    case "Ambition Prosperity Respect":
+      return "Imperial Crest Financials";
+    default:
+      return agencyName || "Unassigned Agency";
+  }
+}
+
 function buildAgencyRows(data) {
   const map = new Map();
 
   for (const row of data || []) {
-    const agencyName = row.agency_name || "Unassigned Agency";
+    const agencyName = getAgencyLeaderboardRollupName(row.agency_name);
 
     if (!map.has(agencyName)) {
       map.set(agencyName, {
