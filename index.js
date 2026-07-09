@@ -564,11 +564,10 @@ function buildAgencyLeaderboardText(agencyRows) {
     .map((agency, i) => {
       const medals = ["🥇", "🥈", "🥉"];
       const displayAgencyName = getAgencyLeaderboardDisplayName(agency.agencyName);
-      const breakoutText = agency.isDisplayOnlyBreakout ? " *(standalone)*" : "";
       const amountText =
         i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`;
 
-      return `${medals[i] || `#${i + 1}`} ${displayAgencyName}${breakoutText} · ${amountText} · ${
+      return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${
         agency.activeAgents
       } ${activeAgentLabel(agency.activeAgents)}`;
     })
