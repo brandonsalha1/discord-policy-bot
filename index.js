@@ -280,9 +280,8 @@ function getAgencyLeaderboardDisplayName(agencyName) {
   switch (agencyName) {
     case "Sezar Butrus (RFG)":
       return "Royal Financial Group";
-    case "Imperial Crest Financials":
     case "Ambition Prosperity Respect":
-      return "Imperial Crest Financials";
+      return "APR";
     default:
       return agencyName || "Unassigned Agency";
   }
@@ -469,25 +468,41 @@ function buildAgencyRows(data) {
         policies: 0,
         ap: 0,
         activeAgents: 0,
+        isDisplayOnlyBreakout: false,
       });
     }
 
     const current = rollupMap.get(agencyName);
 
-    // AP and policies are added from each original agency.
-    // Example:
-    // Imperial Crest Financials AP + Ambition Prosperity Respect AP
+    // ICF still includes APR in the combined rollup.
     current.policies += originalAgency.policies;
     current.ap += originalAgency.ap;
 
     // Active agents are counted per original agency first, then added together.
-    // Example:
-    // Imperial Crest Financials 10 active agents + APR 6 active agents = 16.
-    // This avoids de-duping the same person across both agencies after the rollup.
+    // Example: ICF 10 active agents + APR 6 active agents = 16.
     current.activeAgents += originalAgency.activeAgents.size;
   }
 
-  return [...rollupMap.values()].sort((a, b) => b.ap - a.ap);
+  const displayRows = [...rollupMap.values()];
+  const aprOriginalAgency = originalAgencyMap.get("Ambition Prosperity Respect");
+
+  // Show APR as a separate display-only row so APR can rank by itself,
+  // while ICF still keeps the combined ICF + APR total.
+  if (aprOriginalAgency && aprOriginalAgency.ap > 0) {
+    displayRows.push({
+      agencyName: "Ambition Prosperity Respect",
+      policies: aprOriginalAgency.policies,
+      ap: aprOriginalAgency.ap,
+      activeAgents: aprOriginalAgency.activeAgents.size,
+      isDisplayOnlyBreakout: true,
+    });
+  }
+
+  return displayRows.sort((a, b) => b.ap - a.ap);
+}
+
+function getCountingAgencyRows(agencyRows) {
+  return (agencyRows || []).filter((agency) => !agency.isDisplayOnlyBreakout);
 }
 
 async function fetchGuildMember(interaction) {
@@ -549,10 +564,11 @@ function buildAgencyLeaderboardText(agencyRows) {
     .map((agency, i) => {
       const medals = ["🥇", "🥈", "🥉"];
       const displayAgencyName = getAgencyLeaderboardDisplayName(agency.agencyName);
+      const breakoutText = agency.isDisplayOnlyBreakout ? " *(standalone)*" : "";
       const amountText =
         i < 3 ? `**${formatMoney(agency.ap)} AP**` : `${formatMoney(agency.ap)} AP`;
 
-      return `${medals[i] || `#${i + 1}`} ${displayAgencyName} · ${amountText} · ${
+      return `${medals[i] || `#${i + 1}`} ${displayAgencyName}${breakoutText} · ${amountText} · ${
         agency.activeAgents
       } ${activeAgentLabel(agency.activeAgents)}`;
     })
@@ -967,8 +983,9 @@ ${agentLeaderboard}
       }
 
       const agencyLeaderboard = buildAgencyLeaderboardText(agencyRows);
-      const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0);
-      const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0);
+      const countingAgencyRows = getCountingAgencyRows(agencyRows);
+      const totalPolicies = countingAgencyRows.reduce((s, r) => s + r.policies, 0);
+      const totalAP = countingAgencyRows.reduce((s, r) => s + r.ap, 0);
 
       const embed = new EmbedBuilder()
         .setColor(0x3b82f6)
@@ -980,7 +997,7 @@ ${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)}** Total AP
 📄 **${totalPolicies}** Policies
-🏢 **${agencyRows.length}** Active Agencies`
+🏢 **${countingAgencyRows.length}** Active Agencies`
         )
         .setTimestamp();
 
@@ -992,7 +1009,7 @@ ${agencyLeaderboard}
         year,
         totalPolicies,
         totalAP,
-        activeAgencies: agencyRows.length,
+        activeAgencies: countingAgencyRows.length,
       });
 
       return;
@@ -1052,8 +1069,9 @@ ${agencyLeaderboard}
       }
 
       const agencyLeaderboard = buildAgencyLeaderboardText(agencyRows);
-      const totalPolicies = agencyRows.reduce((s, r) => s + r.policies, 0);
-      const totalAP = agencyRows.reduce((s, r) => s + r.ap, 0);
+      const countingAgencyRows = getCountingAgencyRows(agencyRows);
+      const totalPolicies = countingAgencyRows.reduce((s, r) => s + r.policies, 0);
+      const totalAP = countingAgencyRows.reduce((s, r) => s + r.ap, 0);
 
       const embed = new EmbedBuilder()
         .setColor(0x22c55e)
@@ -1065,7 +1083,7 @@ ${agencyLeaderboard}
 
 📈 **${formatMoney(totalAP)} AP** Total
 📄 **${totalPolicies}** Policies
-🏢 **${agencyRows.length}** Active Agencies`
+🏢 **${countingAgencyRows.length}** Active Agencies`
         )
         .setTimestamp();
 
@@ -1076,7 +1094,7 @@ ${agencyLeaderboard}
         dayName,
         totalPolicies,
         totalAP,
-        activeAgencies: agencyRows.length,
+        activeAgencies: countingAgencyRows.length,
       });
 
       return;
