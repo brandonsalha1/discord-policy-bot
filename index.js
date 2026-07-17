@@ -257,7 +257,7 @@ function getAgentAgencyDisplayName(agencyName) {
     case "Imperial Crest Financials":
       return "ICF";
     case "Ambition Prosperity Respect":
-      return "APR/ICF";
+      return "APR";
     case "Stalex Financial":
       return "SF";
     default:
@@ -270,7 +270,7 @@ function getSaleAgencyDisplayName(agencyName) {
     case "Sezar Butrus (RFG)":
       return "Royal Financial Group";
     case "Ambition Prosperity Respect":
-      return "APR/ICF";
+      return "Ambition Prosperity Respect";
     default:
       return agencyName || "Unassigned Agency";
   }
@@ -281,7 +281,7 @@ function getAgencyLeaderboardDisplayName(agencyName) {
     case "Sezar Butrus (RFG)":
       return "Royal Financial Group";
     case "Ambition Prosperity Respect":
-      return "APR";
+      return "Ambition Prosperity Respect";
     default:
       return agencyName || "Unassigned Agency";
   }
@@ -314,19 +314,6 @@ function getCanonicalAgencyName(agencyName) {
 
     default:
       return String(agencyName || "").trim() || "Unassigned Agency";
-  }
-}
-
-function getAgencyLeaderboardRollupName(agencyName) {
-  const canonicalAgencyName = getCanonicalAgencyName(agencyName);
-
-  switch (canonicalAgencyName) {
-    case "Imperial Crest Financials":
-    case "Ambition Prosperity Respect":
-      return "Imperial Crest Financials";
-
-    default:
-      return canonicalAgencyName;
   }
 }
 
@@ -429,80 +416,44 @@ function getVisibleAgentRows(rows) {
 }
 
 function buildAgencyRows(data) {
-  const originalAgencyMap = new Map();
+  const agencyMap = new Map();
 
   for (const row of data || []) {
-    const originalAgencyName = getCanonicalAgencyName(row.agency_name);
-    const rollupAgencyName = getAgencyLeaderboardRollupName(originalAgencyName);
+    const agencyName = getCanonicalAgencyName(row.agency_name);
 
-    if (!originalAgencyMap.has(originalAgencyName)) {
-      originalAgencyMap.set(originalAgencyName, {
-        originalAgencyName,
-        rollupAgencyName,
+    if (!agencyMap.has(agencyName)) {
+      agencyMap.set(agencyName, {
+        agencyName,
         policies: 0,
         ap: 0,
         activeAgents: new Set(),
       });
     }
 
-    const current = originalAgencyMap.get(originalAgencyName);
+    const current = agencyMap.get(agencyName);
 
     current.policies += 1;
     current.ap += Number(row.annual_premium || 0);
 
-    const activeAgentKey = getAgencyActiveAgentKey(row, originalAgencyName);
+    const activeAgentKey = getAgencyActiveAgentKey(row, agencyName);
 
     if (activeAgentKey) {
       current.activeAgents.add(activeAgentKey);
     }
   }
 
-  const rollupMap = new Map();
-
-  for (const originalAgency of originalAgencyMap.values()) {
-    const agencyName = originalAgency.rollupAgencyName;
-
-    if (!rollupMap.has(agencyName)) {
-      rollupMap.set(agencyName, {
-        agencyName,
-        policies: 0,
-        ap: 0,
-        activeAgents: 0,
-        isDisplayOnlyBreakout: false,
-      });
-    }
-
-    const current = rollupMap.get(agencyName);
-
-    // ICF still includes APR in the combined rollup.
-    current.policies += originalAgency.policies;
-    current.ap += originalAgency.ap;
-
-    // Active agents are counted per original agency first, then added together.
-    // Example: ICF 10 active agents + APR 6 active agents = 16.
-    current.activeAgents += originalAgency.activeAgents.size;
-  }
-
-  const displayRows = [...rollupMap.values()];
-  const aprOriginalAgency = originalAgencyMap.get("Ambition Prosperity Respect");
-
-  // Show APR as a separate display-only row so APR can rank by itself,
-  // while ICF still keeps the combined ICF + APR total.
-  if (aprOriginalAgency && aprOriginalAgency.ap > 0) {
-    displayRows.push({
-      agencyName: "Ambition Prosperity Respect",
-      policies: aprOriginalAgency.policies,
-      ap: aprOriginalAgency.ap,
-      activeAgents: aprOriginalAgency.activeAgents.size,
-      isDisplayOnlyBreakout: true,
-    });
-  }
-
-  return displayRows.sort((a, b) => b.ap - a.ap);
+  return [...agencyMap.values()]
+    .map((agency) => ({
+      agencyName: agency.agencyName,
+      policies: agency.policies,
+      ap: agency.ap,
+      activeAgents: agency.activeAgents.size,
+    }))
+    .sort((a, b) => b.ap - a.ap);
 }
 
 function getCountingAgencyRows(agencyRows) {
-  return (agencyRows || []).filter((agency) => !agency.isDisplayOnlyBreakout);
+  return agencyRows || [];
 }
 
 async function fetchGuildMember(interaction) {
