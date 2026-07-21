@@ -21,7 +21,10 @@ const commands = [
           { name: 'Corebridge', value: 'Corebridge' },
           { name: 'Ethos', value: 'Ethos' },
           { name: 'Guaranteed Trust Life', value: 'Guaranteed Trust Life' },
+          { name: 'GPM Life', value: 'GPM Life' },
           { name: 'Instabrain', value: 'Instabrain' },
+          { name: 'Kansas City Life', value: 'Kansas City Life' },
+          { name: 'Lafayette', value: 'Lafayette' },
           { name: 'Liberty Bankers', value: 'Liberty Bankers' },
           { name: 'Mutual of Omaha', value: 'Mutual of Omaha' },
           { name: 'Polish Falcon', value: 'Polish Falcon' },
@@ -32,7 +35,7 @@ const commands = [
           { name: 'United Home Life', value: 'United Home Life' }
         )
     )
-    .addNumberOption((option) =>
+        .addNumberOption((option) =>
       option
         .setName('monthly-premium')
         .setDescription('Monthly premium')
